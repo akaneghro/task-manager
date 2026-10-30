@@ -1,0 +1,56 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please do not include tokens, secrets or personal data.
+        Security issues go to a [private advisory](https://github.com/akaneghro/task-manager/security/advisories/new) instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. See ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Web UI
+        - MCP server / Claude Code
+        - Setup and scripts (setup, connect, migrate...)
+        - Windows service
+        - Deploy (Turso, Netlify, Vercel)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: 0.1.0 or a commit hash
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node.js and pnpm versions, browser; for MCP issues also the Claude Code version.
+      placeholder: Windows 11, Node 22.18, pnpm 10.27, Chrome 141
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Relevant output (remove any token or secret first).
+      render: shell
