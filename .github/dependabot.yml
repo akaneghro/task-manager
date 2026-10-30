@@ -8,6 +8,12 @@ updates:
     commit-message:
       prefix: chore
       include: scope
+    ignore:
+      # Pinned on purpose: TypeScript 7 and @types/node beyond the supported Node line
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
     groups:
       dependencies:
         update-types: [minor, patch]
