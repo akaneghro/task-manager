@@ -32,7 +32,7 @@ GitHub users and through public read-only links.
 | `pnpm db:migrate` | Apply migrations to `NUXT_DATABASE_URL` |
 | `pnpm db:seed` | Ensure the Inbox project exists (+ optional demo data with `--demo`) |
 | `pnpm gen:keys` | Print a fresh `NUXT_SESSION_PASSWORD` and `NUXT_VAULT_KEY` |
-| `pnpm connect <repo> <slug>` | Write the MCP config (`.mcp.json`) of another repo |
+| `pnpm connect <folder> [slug]` | Write the MCP config (`.mcp.json`) of another folder; slug defaults to the folder name, the project may not exist yet |
 | `pnpm service:install` / `service:update` / `service:status` ... | Always-on local service: Windows logon task `TaskManager` -> `scripts/service-run.mjs` supervisor -> production build on `127.0.0.1:3000`, logs in `data/logs/` |
 
 The service and `pnpm dev` share port 3000: run `pnpm service:stop` before `pnpm dev`, and `pnpm service:update`

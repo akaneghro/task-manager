@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ArgsError, parseArgs, parseConnectArgs } from '../args'
+import { ArgsError, parseArgs, parseConnectArgs, projectSlugFromFolder } from '../args'
 
 describe('parseArgs', () => {
   const spec = { boolean: ['demo', 'force'], string: ['url'], alias: { h: 'help', f: 'force' } }
@@ -42,6 +42,7 @@ describe('parseConnectArgs', () => {
     expect(parseConnectArgs(['C:\\Work\\repo', 'Demo-Web'])).toEqual({
       repoPath: 'C:\\Work\\repo',
       projectSlug: 'demo-web',
+      slugFromFolder: false,
       url: undefined,
       name: 'task-manager',
       envToken: false,
@@ -61,9 +62,16 @@ describe('parseConnectArgs', () => {
     expect(parseConnectArgs(['--help']).help).toBe(true)
   })
 
+  it('derives the project slug from the folder name when omitted', () => {
+    expect(parseConnectArgs(['C:\\Work\\PROJECTS\\Renkia Web'])).toMatchObject({ projectSlug: 'renkia-web', slugFromFolder: true })
+    expect(parseConnectArgs(['C:/Work/PROJECTS/renkia/'])).toMatchObject({ projectSlug: 'renkia', slugFromFolder: true })
+    expect(parseConnectArgs(['C:/Work/PROJECTS/renkia', 'RNK-site'])).toMatchObject({ projectSlug: 'rnk-site', slugFromFolder: false })
+    expect(projectSlugFromFolder('D:\\Clientes\\Casa Índica\\')).toBe('casa-indica')
+    expect(() => parseConnectArgs(['C:/Work/___'])).toThrow(/Could not derive/)
+  })
+
   it('validates positionals and the server name', () => {
-    expect(() => parseConnectArgs([])).toThrow(/Missing arguments/)
-    expect(() => parseConnectArgs(['repo'])).toThrow(/Missing arguments/)
+    expect(() => parseConnectArgs([])).toThrow(/Missing argument/)
     expect(() => parseConnectArgs(['repo', 'slug', 'extra'])).toThrow(/Unexpected/)
     expect(() => parseConnectArgs(['repo', 'slug', '--name', 'bad name'])).toThrow(/--name/)
   })

@@ -1,5 +1,5 @@
 // Connects another repository to Task Manager: writes its project MCP config (.mcp.json) and gitignores it.
-// Usage: pnpm connect <repoPath> <projectSlug> [--url <base>] [--name task-manager] [--env-token] [--force] [--dry-run]
+// Usage: pnpm connect <folder> [projectSlug] [--url <base>] [--name task-manager] [--env-token] [--force] [--dry-run]
 
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { Writable } from 'node:stream'
 import { slugSchema } from '../shared/schemas/common'
+import { ALL_PROJECTS } from '../shared/utils/enums'
 import { ArgsError, CONNECT_USAGE, parseConnectArgs } from './lib/args'
 import type { ConnectOptions } from './lib/args'
 import { loadProjectEnv } from './lib/env'
@@ -71,8 +72,11 @@ function parseCheckResult(value: unknown): CheckResult | null {
   return { tokenName, projectExists }
 }
 
-/** Verifies the token and the project against the running server. */
-async function verify(baseUrl: string, token: string, options: ConnectOptions): Promise<void> {
+/**
+ * Verifies the token and looks the project up on the running server.
+ * Returns whether the project exists, or `null` when the server could not be asked (--force).
+ */
+async function verify(baseUrl: string, token: string, options: ConnectOptions): Promise<boolean | null> {
   const url = `${baseUrl}/api/connect/check?project=${encodeURIComponent(options.projectSlug)}`
   let response: Response
   try {
@@ -87,7 +91,7 @@ async function verify(baseUrl: string, token: string, options: ConnectOptions): 
       throw new ConnectError(`Could not reach ${baseUrl} (${reason}). Is the server running? Use --force to write the config anyway.`)
     }
     warn(`Could not reach ${baseUrl} (${reason}); continuing because of --force.`)
-    return
+    return null
   }
 
   if (response.status === 401) throw new ConnectError('Invalid token (401). Create a new one in Task Manager > Settings > API tokens.')
@@ -95,17 +99,20 @@ async function verify(baseUrl: string, token: string, options: ConnectOptions): 
     const message = `Unexpected response from ${url}: HTTP ${response.status}`
     if (!options.force) throw new ConnectError(`${message}. Use --force to write the config anyway.`)
     warn(`${message}; continuing because of --force.`)
-    return
+    return null
   }
 
   const result = parseCheckResult(await response.json().catch(() => null))
   if (!result) throw new ConnectError(`Unexpected response from ${url} (is --url pointing at Task Manager?)`)
   console.log(`Token OK (${result.tokenName}).`)
-  if (!result.projectExists) {
-    const message = `Project "${options.projectSlug}" does not exist. Create it first in ${baseUrl}/projects (or ask Claude to use create_project).`
-    if (!options.force) throw new ConnectError(message)
-    warn(`${message} Continuing because of --force.`)
+  if (result.projectExists) {
+    console.log(`Project "${options.projectSlug}" found.`)
   }
+  else {
+    warn(`Project "${options.projectSlug}" does not exist yet. Connecting anyway: create it in ${baseUrl}/projects with `
+      + `slug "${options.projectSlug}", or let Claude create it from this folder (see next steps).`)
+  }
+  return result.projectExists
 }
 
 /** Returns `true` when `.mcp.json` is tracked by git, `false` when not, `null` when git is unavailable. */
@@ -119,11 +126,15 @@ async function run(options: ConnectOptions): Promise<void> {
   // 1) Repository
   const repo = resolve(options.repoPath)
   if (!existsSync(repo) || !statSync(repo).isDirectory()) throw new ConnectError(`Not a directory: ${repo}`)
-  if (!existsSync(join(repo, '.git'))) warn(`${repo} does not look like a git repository (no .git).`)
+  if (!existsSync(join(repo, '.git'))) {
+    console.log(`Note: ${repo} is not a git repository; that is fine (any folder where you open Claude Code works).`)
+  }
 
   const slug = slugSchema.safeParse(options.projectSlug)
   if (!slug.success) throw new ConnectError(`Invalid project slug "${options.projectSlug}" (lowercase letters, numbers and dashes).`)
   const projectSlug = slug.data
+  if (projectSlug === ALL_PROJECTS) throw new ConnectError(`"${ALL_PROJECTS}" is reserved; pass another <projectSlug>.`)
+  if (options.slugFromFolder) console.log(`Project slug: ${projectSlug} (from the folder name; pass a second argument to change it)`)
 
   // 2) Base URL
   const baseUrl = normalizeBaseUrl(options.url ?? process.env.TM_URL ?? DEFAULT_BASE_URL)
@@ -141,7 +152,7 @@ async function run(options: ConnectOptions): Promise<void> {
 
   // 4) Verify against the server
   console.log(`Checking ${baseUrl} ...`)
-  await verify(baseUrl, token, { ...options, projectSlug })
+  const projectExists = await verify(baseUrl, token, { ...options, projectSlug })
 
   // 5) .mcp.json
   const entry = buildMcpEntry({ baseUrl, projectSlug, token, envToken: options.envToken })
@@ -181,7 +192,9 @@ async function run(options: ConnectOptions): Promise<void> {
     `  1. Open Claude Code in ${repo}`,
     `  2. Approve the project MCP server "${options.name}" when asked (or check it with /mcp)`,
     '  3. Run /mcp to confirm it is connected',
-    '  4. Try: "usa get_context" (or "use get_context")',
+    projectExists === false
+      ? `  4. Ask: "crea el proyecto en el task manager" (Claude creates "${projectSlug}" and asks for status/client)`
+      : '  4. Try: "usa get_context" (or "use get_context")',
     '',
     'Troubleshooting: if /mcp shows the server as "needs authentication" (and Authenticate fails), the API token',
     'was revoked, expired or mistyped: create a new one in Settings > API tokens and rerun this command.',

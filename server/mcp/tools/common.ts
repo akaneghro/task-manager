@@ -52,7 +52,10 @@ export async function resolveProjectArg(ctx: ServiceContext, value: string, from
   throw new ServiceError(
     'not_found',
     `Project "${value}" not found${origin}. Use list_projects to see the valid slugs and keys`
-    + (fromSession ? ', and ask the user to fix the header (pnpm connect <repo> <slug>)' : ''),
+    + (fromSession
+      ? `. If it simply does not exist yet, offer the user to create it with create_project using slug "${value}"; `
+      + 'if the folder points at the wrong project, ask the user to rerun pnpm connect <folder> <slug>'
+      : ''),
     { reason: 'project_not_found' },
   )
 }

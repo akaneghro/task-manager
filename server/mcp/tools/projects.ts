@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { PROJECT_LINK_KINDS, PROJECT_STATUSES } from '../../../shared/utils/enums'
 import { projectKeySchema, slugSchema, urlSchema } from '../../../shared/schemas/common'
 import type { ProjectLinkInput } from '../../../shared/schemas/project'
+import { isServiceError } from '../../services/context'
 import { createProject, getProject, listProjects, replaceProjectLinks, updateProjectNotes } from '../../services/projects'
 import { getProjectContext } from '../../services/tasks'
 import { jsonResult, runTool } from '../result'
@@ -43,7 +44,31 @@ export const registerProjectTools: ToolRegistrar = (server, ctx) => {
         projects: projects.map(compactProjectSummary),
       })
     }
-    const row = project ? await resolveProjectArg(ctx, project) : await resolveProjectArg(ctx, fallback ?? '', true)
+    let row
+    if (project) {
+      row = await resolveProjectArg(ctx, project)
+    }
+    else {
+      const sessionSlug = fallback ?? ''
+      row = await resolveProjectArg(ctx, sessionSlug, true).catch((error: unknown) => {
+        if (isServiceError(error) && error.code === 'not_found') return null
+        throw error
+      })
+      if (!row) {
+        // The folder was connected before its project existed (`pnpm connect <folder>`): offer to create it.
+        const projects = await listProjects(ctx, {})
+        return jsonResult({
+          session,
+          missingProject: sessionSlug,
+          hint: `This folder is connected to project "${sessionSlug}" (X-TM-Project header), but that project does not `
+            + `exist yet. Offer the user to create it now with create_project using slug "${sessionSlug}" exactly (so `
+            + 'this connection keeps working): ask for its status and client, propose a short name and a 2-6 letter key, '
+            + 'and you may fill description/links from the repository. Until then, quick captures can go to the Inbox '
+            + '(project "inbox").',
+          projects: projects.map(compactProjectSummary),
+        })
+      }
+    }
     const context = await getProjectContext(ctx, row.slug)
     return jsonResult({ session, ...compactProjectContext(context) }, { structured: true })
   }))
@@ -75,7 +100,8 @@ export const registerProjectTools: ToolRegistrar = (server, ctx) => {
 
   server.registerTool('create_project', {
     title: 'Create project',
-    description: 'Creates a new project. Only do this when the user asks for it. "key" is the 2-6 letter task key '
+    description: 'Creates a new project. Only do this when the user asks for it (or accepts your offer when '
+      + 'get_context reports "missingProject": then pass that exact value as "slug"). "key" is the 2-6 letter task key '
       + 'prefix (e.g. "RNK" -> tasks RNK-1, RNK-2...) and can never change. The slug is derived from the name when '
       + 'omitted ("inbox" and "all" are reserved).',
     inputSchema: z.object({

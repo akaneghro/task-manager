@@ -1,5 +1,8 @@
 // Tiny, dependency-free CLI argument parser shared by the scripts (pure, tested).
 
+import { basename, resolve } from 'node:path'
+import { slugify } from '../../shared/utils/taskKey'
+
 export class ArgsError extends Error {
   constructor(message: string) {
     super(message)
@@ -88,6 +91,8 @@ export function parseArgs(argv: readonly string[], spec: ArgSpec = {}): ParsedAr
 export interface ConnectOptions {
   repoPath: string
   projectSlug: string
+  /** True when the slug was derived from the folder name (no <projectSlug> argument). */
+  slugFromFolder: boolean
   /** Base URL from `--url` (not yet normalised); `undefined` = use TM_URL / default. */
   url?: string
   /** MCP server name inside `.mcp.json`. */
@@ -98,17 +103,20 @@ export interface ConnectOptions {
   help: boolean
 }
 
-export const CONNECT_USAGE = `Usage: pnpm connect <repoPath> <projectSlug> [options]
+export const CONNECT_USAGE = `Usage: pnpm connect <folder> [projectSlug] [options]
 
-Writes (or updates) the Task Manager MCP server entry in <repoPath>/.mcp.json
-and makes sure .mcp.json is gitignored in that repo.
+Writes (or updates) the Task Manager MCP server entry in <folder>/.mcp.json
+and makes sure .mcp.json is gitignored there. <folder> is where you open
+Claude Code: a git repo or any folder (e.g. one holding several repos).
+projectSlug defaults to the folder name ("C:\\Work\\Renkia Web" -> renkia-web).
+The project does not need to exist yet: Claude can create it with that slug.
 
 Options:
   --url <base>     Task Manager base URL (default: TM_URL or http://localhost:3000)
   --name <name>    MCP server name in .mcp.json (default: task-manager)
   --env-token      Write "Bearer \${TM_TOKEN}" instead of the token itself
                    (Claude Code must then see TM_TOKEN in its environment)
-  --force          Continue when the server cannot be reached or the project does not exist
+  --force          Write the config even if the server cannot be reached
   --dry-run        Show what would change without writing anything
   -h, --help       Show this help
 
@@ -126,14 +134,19 @@ export function parseConnectArgs(argv: readonly string[]): ConnectOptions {
   const help = parsed.booleans.help === true
   const [repoPath, projectSlug, ...extra] = parsed.positionals
   if (!help) {
-    if (!repoPath || !projectSlug) throw new ArgsError('Missing arguments: <repoPath> <projectSlug>')
+    if (!repoPath) throw new ArgsError('Missing argument: <folder>')
     if (extra.length > 0) throw new ArgsError(`Unexpected arguments: ${extra.join(' ')}`)
   }
   const name = parsed.strings.name ?? 'task-manager'
   if (!SERVER_NAME_RE.test(name)) throw new ArgsError('--name may only contain letters, numbers, "-" and "_"')
+  const derived = !projectSlug && repoPath ? projectSlugFromFolder(repoPath) : ''
+  if (!help && !projectSlug && !derived) {
+    throw new ArgsError('Could not derive a project slug from the folder name: pass <projectSlug> explicitly')
+  }
   return {
     repoPath: repoPath ?? '',
-    projectSlug: (projectSlug ?? '').trim().toLowerCase(),
+    projectSlug: projectSlug ? projectSlug.trim().toLowerCase() : derived,
+    slugFromFolder: !projectSlug,
     url: parsed.strings.url,
     name,
     envToken: parsed.booleans['env-token'] === true,
@@ -141,4 +154,9 @@ export function parseConnectArgs(argv: readonly string[]): ConnectOptions {
     force: parsed.booleans.force === true,
     help,
   }
+}
+
+/** Project slug derived from a folder path: `C:\Work\Renkia Web\` -> `renkia-web`. Empty when nothing usable. */
+export function projectSlugFromFolder(folder: string): string {
+  return slugify(basename(resolve(folder.replace(/[\\/]+$/, '') || '.')))
 }

@@ -5,7 +5,7 @@ export const SERVER_INSTRUCTIONS = `Task Manager is the user's personal projects
 Language: the user usually writes in Spanish. Reply to the user in the language they use; task titles, descriptions and comments should follow the language the project already uses (default Spanish).
 
 Workflow:
-1. Call get_context at the start of a session. It shows what is in progress, next up, blocked and in review, plus the project links and notes: read the notes, they hold what earlier sessions learned (setup steps, decisions, gotchas). If "notesTruncated" is true, call get_project once for the full notes.
+1. Call get_context at the start of a session. If it reports "missingProject", the folder was connected before its project existed: offer to create it with create_project using exactly that slug. It shows what is in progress, next up, blocked and in review, plus the project links and notes: read the notes, they hold what earlier sessions learned (setup steps, decisions, gotchas). If "notesTruncated" is true, call get_project once for the full notes.
 2. Before any non-trivial work, find the matching task (get_context, search_tasks) or create one with create_task (set type, size, executor "ai" for work you do yourself, and a checklist for multi-step work). Trivial questions or one-line fixes do not need a task.
 3. When you start working on a task, set_status "in_progress".
 4. Tick checklist items with toggle_checklist_item as you complete them; add items with add_checklist_items when new steps appear.

@@ -87,18 +87,22 @@ itself, or set `TM_SERVICE_PORT` and add that port's callback URL to your GitHub
 
 1. In the app open **Settings → API tokens** and create a token (shown once). Tick **Allow secrets** only if
    Claude should be able to read vault entries you explicitly share with it.
-2. From this folder, connect a repository to one of your projects:
+2. From this folder, connect the folder where you open Claude Code (a git repo or any folder, e.g. one holding
+   several repos). Put the token in `TM_TOKEN` (env file) or paste it when asked:
 
    ```bash
-   pnpm connect C:\Work\PROJECTS\my-site my-site
+   pnpm connect C:\Work\PROJECTS\my-site           # project slug = folder name ("my-site")
+   pnpm connect C:\Work\PROJECTS\my-site web-shop  # or an explicit slug
    # --url https://tm.example.com   use a deployed instance (default: TM_URL or http://localhost:3000)
    # --env-token                    write "Bearer ${TM_TOKEN}" instead of the token itself
    # --dry-run                      show the changes without writing
    ```
 
-   The script verifies the token, merges the server into `<repo>/.mcp.json` (keeping your other servers) and adds
-   `.mcp.json` to that repo's `.gitignore`.
-3. Open Claude Code in the repo, approve the `task-manager` server, run `/mcp` and try *"use get_context"*.
+   The script verifies the token, merges the server into `<folder>/.mcp.json` (keeping your other servers) and
+   adds `.mcp.json` to that folder's `.gitignore`. The project does not have to exist yet.
+3. Open Claude Code in that folder, approve the `task-manager` server, run `/mcp` and try *"use get_context"*.
+   If the project does not exist yet, Claude offers to create it with that slug (*"crea el proyecto en el task
+   manager"*).
 
 Manual `.mcp.json`:
 
@@ -201,7 +205,7 @@ Free setup: Turso (database) + Netlify or Vercel. Step by step guide: [docs/depl
 | `pnpm db:seed [--demo]` | Ensure the Inbox (and optionally create demo projects) |
 | `pnpm db:studio` | Drizzle Studio |
 | `pnpm gen:keys` | Print a new `NUXT_SESSION_PASSWORD` and `NUXT_VAULT_KEY` |
-| `pnpm connect <repo> <slug>` | Write the MCP config of another repository |
+| `pnpm connect <folder> [slug]` | Write the MCP config of another folder (slug defaults to the folder name) |
 | `pnpm service:<install\|update\|start\|stop\|restart\|status\|logs\|uninstall>` | Always-on local service (Windows) |
 
 ## Project structure

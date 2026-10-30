@@ -48,10 +48,14 @@ Every write is attributed to `mcp:<token name>` (`created_by`, `updated_by`, com
 The easiest way is the helper script, run from the task-manager folder:
 
 ```bash
-pnpm connect <path-to-repo> <project-slug>            # asks for the token (hidden input)
+pnpm connect <folder> [project-slug]                  # slug defaults to the folder name; token from TM_TOKEN or asked (hidden)
 pnpm connect ../my-site my-site --url https://tm.example.com
 pnpm connect ../my-site my-site --env-token           # writes "Bearer ${TM_TOKEN}" instead of the token
 ```
+
+The folder can be a git repo or any folder where you open Claude Code (for example one holding several repos).
+The project does not have to exist yet: `get_context` then returns `missingProject` and Claude offers to create it
+with `create_project` using that exact slug.
 
 | Option | Default | Description |
 |---|---|---|

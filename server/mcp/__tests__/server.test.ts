@@ -371,11 +371,30 @@ describe('mcp server: projects and context', () => {
     expect((await call(client, 'get_project')).isError).toBe(true)
   })
 
-  it('get_context reports an unknown default project clearly', async () => {
+  it('get_context offers to create a default project that does not exist yet, then uses it', async () => {
     const client = await connect(mcpCtx({ defaultProject: 'ghost' }))
-    const result = await call(client, 'get_context')
+    const missing = json<{ missingProject: string, hint: string, projects: Array<{ slug: string }> }>(await call(client, 'get_context'))
+    expect(missing.missingProject).toBe('ghost')
+    expect(missing.hint).toContain('create_project')
+    expect(missing.hint).toContain('"ghost"')
+    expect(missing.projects.map(p => p.slug)).toContain('inbox')
+
+    // Other tools still explain how to recover.
+    const listed = await call(client, 'get_project')
+    expect(listed.isError).toBe(true)
+    expect(listed.text).toContain('create_project')
+
+    json(await call(client, 'create_project', { name: 'Ghost', key: 'GHO', slug: 'ghost', status: 'development' }))
+    const context = json<{ project: { slug: string } }>(await call(client, 'get_context'))
+    expect(context.project.slug).toBe('ghost')
+    const task = json<{ key: string }>(await call(client, 'create_task', { title: 'First task' }))
+    expect(task.key).toBe('GHO-1')
+  })
+
+  it('get_context still rejects an explicit unknown project', async () => {
+    const client = await connect(mcpCtx())
+    const result = await call(client, 'get_context', { project: 'ghost' })
     expect(result.isError).toBe(true)
-    expect(result.text).toContain('ghost')
     expect(result.text).toContain('list_projects')
   })
 
