@@ -119,6 +119,23 @@ Without the `Accept` header the server answers `406`. A 2025-style request like 
 `429` with `Retry-After`). The MCP budget (bursts of 120, 600 requests/minute) is far above what a Claude session
 uses.
 
+### Suggested `CLAUDE.md` snippet
+
+Add this to the `CLAUDE.md` of each connected repo so every session follows the same routine:
+
+```markdown
+## Task Manager
+
+This repo is tracked in Task Manager (MCP server `task-manager`, default project from `X-TM-Project`).
+
+- Call `get_context` at the start of every session.
+- Before working, find the matching task (`search_tasks`) or create one (type, size, executor `ai`).
+- Move it to `in_progress` when you start and tick checklist items as you complete them.
+- When finished, set `in_review` (or `done`) and `add_comment` with a summary: files, commits, decisions.
+- Always pass `expectedVersion`; on a conflict re-read the task and merge, never overwrite blindly.
+- Do not change priority, due date or assignee unless asked. Never paste secrets in chat, files or commits.
+```
+
 ## Tools
 
 All tools return compact JSON text (null and empty fields are dropped); the main ones also return it as

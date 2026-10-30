@@ -1,73 +1,99 @@
 <p align="center">
-  <img src="public/logo.svg" width="96" height="96" alt="Task Manager logo">
+  <img src="public/logo.svg" width="88" height="88" alt="Task Manager logo">
 </p>
 
 <h1 align="center">Task Manager</h1>
 
 <p align="center">
-  Personal projects &amp; tasks manager for freelancers, with an MCP server so Claude Code can work on your tasks.
+  <strong>Self-hosted projects &amp; tasks for freelancers, with an MCP server so Claude Code works on your tasks too.</strong>
 </p>
+
+<p align="center">
+  <a href="https://github.com/akaneghro/task-manager/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/akaneghro/task-manager/ci.yml?branch=main&label=CI" alt="CI status"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/node-%3E%3D22.18-339933?logo=node.js&logoColor=white" alt="Node >= 22.18">
+  <a href="docs/mcp.md"><img src="https://img.shields.io/badge/MCP-Claude%20Code%20ready-7c3aed" alt="MCP server for Claude Code"></a>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/tasks-board.png" alt="Kanban board with tasks from several projects" width="900">
+</p>
+
+## Why
+
+When you juggle many client projects, tasks end up scattered across notes, issues and chat history. Task Manager
+keeps them in one place with a **global view** of everything, while each **Claude Code** session you open in a
+client repo reads that project's context and creates, updates and closes its tasks through MCP. You see what the
+AI did, and Claude sees what you decided.
 
 ## Features
 
-- **Projects** with status (idea, development, production, maintenance, paused, archived), client, links,
-  markdown notes and a fixed **Inbox** for quick capture
-- **Tasks** with keys like `RNK-12`, status, priority, type, size (XS–XL), executor (AI / human / mixed), assignee,
-  due date, third-party blockers, cross-project dependencies, checklist and comments
-- **Views**: table with filters and sorting, **kanban** with drag & drop, per project and a **global view**
-- **MCP server for Claude Code**: every repo gets its own `.mcp.json`; Claude reads the project context, creates and
-  updates tasks, ticks checklists and writes summaries — with optimistic locking so nothing is overwritten
-- **Sharing**: invite GitHub users as `viewer` or `commenter`, or share a revocable public read-only link
-- **Encrypted vault** per project (AES-256-GCM) with opt-in "share with Claude" secrets and access logging
-- **i18n**: Spanish (default) and English
-- **Dark mode**, keyboard shortcuts (`N` new task, `/` search), auto refresh every 15 s
-
-## Screenshots
-
-| Tasks (table) | Tasks (board) |
-|---|---|
-| ![All tasks in table view](docs/screenshots/tasks-table.png) | ![Kanban board](docs/screenshots/tasks-board.png) |
-| **Task drawer** | **Project overview** |
-| ![Task drawer with checklist, dependency and comment](docs/screenshots/task-drawer.png) | ![Project overview with notes, counts and links](docs/screenshots/project-overview.png) |
-
-## Requirements
-
-- Node.js 22.18+
-- pnpm 10
-- A GitHub account (login is GitHub OAuth)
+- **Projects** with status, client, links, markdown notes and an always-present **Inbox** for quick capture
+- **Tasks** with keys (`WEB-12`), status, priority, type, size, executor (AI / human / mixed), due date,
+  third-party blockers, cross-project dependencies, checklist and comments
+- **Table and kanban views** (drag & drop), per project or across all projects
+- **MCP server**: 19 tools and 2 prompts for Claude Code, with optimistic locking so nobody overwrites anybody
+- **Sharing**: invite GitHub users as viewers or commenters, or share a revocable read-only public link
+- **Encrypted vault** per project (AES-256-GCM), with opt-in, logged access for Claude
+- Spanish and English UI, dark mode, keyboard shortcuts
 
 ## Quick start
 
+**Prerequisites:** [Node.js](https://nodejs.org) 22.18+, [pnpm](https://pnpm.io) 10 and a GitHub account
+(login uses a free GitHub OAuth App; the wizard explains how to create it in one minute).
+
 ```bash
 pnpm install
-pnpm run setup      # first-run wizard (note the "run": plain `pnpm setup` is a pnpm built-in)
-pnpm dev            # http://localhost:3000
+pnpm run setup   # first-run wizard: keys, GitHub OAuth App, local database
+pnpm dev         # http://localhost:3000
 ```
 
-`pnpm run setup` creates your local env file from `.env.example` with a fresh session password and vault key,
-walks you through creating a [GitHub OAuth App](https://github.com/settings/applications/new)
-(Homepage URL `http://localhost:3000`, callback URL `http://localhost:3000/auth/github`), asks for its client
-id/secret (hidden) and your GitHub username, and creates the local SQLite database (`data/task-manager.db`) with
-the Inbox. It never prints secrets; an existing env file is kept unless you choose to overwrite it (a backup is
-saved). For scripted installs: `pnpm run setup --client-id <id> --client-secret <secret> --login <you> --yes`.
+> Use `pnpm run setup`, with `run`: plain `pnpm setup` is a built-in pnpm command.
 
-Optional: `pnpm db:seed --demo` adds two demo projects with sample tasks.
+Open <http://localhost:3000> and log in with GitHub. Want sample data? `pnpm db:seed --demo`.
 
 <details>
-<summary>Manual setup</summary>
+<summary>What the wizard does / manual setup</summary>
+
+`pnpm run setup` creates your local env file from [`.env.example`](.env.example) with a fresh session password and
+vault key, guides you through a [GitHub OAuth App](https://github.com/settings/applications/new)
+(Homepage URL `http://localhost:3000`, callback URL `http://localhost:3000/auth/github`), asks for its client
+id and secret (hidden input) and your GitHub username, then creates the SQLite database (`data/task-manager.db`)
+with the Inbox. It never prints secrets and keeps an existing env file unless you choose to overwrite it (a backup
+is saved). Non-interactive: `pnpm run setup --client-id <id> --client-secret <secret> --login <you> --yes`.
+
+Manual alternative:
 
 1. Copy `.env.example` to `.env` and paste the output of `pnpm gen:keys` into it.
-2. Create the GitHub OAuth App (URLs above) and set `NUXT_OAUTH_GITHUB_CLIENT_ID`,
+2. Create the GitHub OAuth App (URLs above) and fill in `NUXT_OAUTH_GITHUB_CLIENT_ID`,
    `NUXT_OAUTH_GITHUB_CLIENT_SECRET` and `NUXT_OWNER_GITHUB_LOGIN` (your GitHub username).
-3. `pnpm db:migrate` creates the database and the Inbox.
+3. Run `pnpm db:migrate` to create the database and the Inbox.
 
 </details>
 
-## Always-on local service (Windows)
+## Connect Claude Code
 
-Instead of running `pnpm dev` every day, install the app as a background service that starts hidden when you
-log in to Windows (Task Scheduler task `TaskManager`, production build, listening on `127.0.0.1:3000` only,
-restarted automatically if it crashes, logs in `data/logs/server.log`):
+1. In the app, open **Settings → API tokens** and create a token (it is shown once).
+2. Connect the folder where you open Claude Code (the project slug defaults to the folder name):
+
+   ```bash
+   pnpm connect C:\Work\my-site
+   ```
+
+   It asks for the token (or reads `TM_TOKEN`), writes `<folder>/.mcp.json` and adds it to that folder's
+   `.gitignore`. The project does not need to exist yet.
+3. Open Claude Code in that folder, approve the `task-manager` server and ask it to *"use get_context"*.
+
+Options (`--url`, `--env-token`, `--dry-run`...), the manual `.mcp.json`, every tool and a suggested `CLAUDE.md`
+snippet are in the **[MCP reference](docs/mcp.md)**.
+
+## More
+
+<details>
+<summary><strong>Always-on local service (Windows)</strong></summary>
+
+Run the app in the background at logon instead of `pnpm dev` (Task Scheduler task `TaskManager`, production build
+on `127.0.0.1:3000`, restarted if it crashes, logs in `data/logs/server.log`):
 
 ```powershell
 pnpm service:install     # build + migrate + register the logon task + start now
@@ -78,165 +104,128 @@ pnpm service:logs        # last lines of the server log
 pnpm service:stop | service:start | service:uninstall
 ```
 
-The service and `pnpm dev` both use port 3000: stop the service (`pnpm service:stop`) before developing the app
-itself, or set `TM_SERVICE_PORT` and add that port's callback URL to your GitHub OAuth App.
+The service and `pnpm dev` share port 3000: stop the service before running `pnpm dev`, or set `TM_SERVICE_PORT`
+and add that port's callback URL to your GitHub OAuth App.
 
-## Connecting Claude Code
+</details>
 
-1. In the app open **Settings → API tokens** and create a token (shown once). Tick **Allow secrets** only if
-   Claude should be able to read vault entries you explicitly share with it.
-2. From this folder, connect the folder where you open Claude Code (a git repo or any folder, e.g. one holding
-   several repos). Put the token in `TM_TOKEN` (env file) or paste it when asked:
+<details>
+<summary><strong>Deploy</strong></summary>
 
-   ```bash
-   pnpm connect C:\Work\PROJECTS\my-site           # project slug = folder name ("my-site")
-   pnpm connect C:\Work\PROJECTS\my-site web-shop  # or an explicit slug
-   # --url https://tm.example.com   use a deployed instance (default: TM_URL or http://localhost:3000)
-   # --env-token                    write "Bearer ${TM_TOKEN}" instead of the token itself
-   # --dry-run                      show the changes without writing
-   ```
+A free setup with Turso (database) and Netlify or Vercel (hosting) is described step by step in
+**[docs/deploy.md](docs/deploy.md)**, including production environment variables, key rotation and backups.
 
-   The script verifies the token, merges the server into `<folder>/.mcp.json` (keeping your other servers) and
-   adds `.mcp.json` to that folder's `.gitignore`. The project does not have to exist yet.
-3. Open Claude Code in that folder, approve the `task-manager` server, run `/mcp` and try *"use get_context"*.
-   If the project does not exist yet, Claude offers to create it with that slug (*"crea el proyecto en el task
-   manager"*).
+</details>
 
-Manual `.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "task-manager": {
-      "type": "http",
-      "url": "http://localhost:3000/mcp",
-      "headers": {
-        "Authorization": "Bearer tm_...",
-        "X-TM-Project": "my-site"
-      }
-    }
-  }
-}
-```
-
-### MCP tools
+<details>
+<summary><strong>MCP tools</strong></summary>
 
 | Tool | What it does |
 |---|---|
-| `get_context` | Snapshot of the current project: links, notes (what earlier sessions learned), counts, in progress, next up, blocked, in review |
-| `list_projects` | List projects (filter by status) |
-| `get_project` | Project detail: description, full notes, links, client |
-| `list_tasks` | List tasks with filters (status, priority, type, executor, assignee kind, due date, text `q`) or across all projects (`"all"`) |
-| `get_task` | Task detail with checklist, dependencies, the latest 20 comments (or all) and version |
-| `search_tasks` | Free-text search by title, description or key, most recently updated first |
-| `create_task` | Create a task (with checklist, third-party blocker and `blockedBy` dependencies) |
-| `update_task` | Update task fields with `expectedVersion` (conflict-safe) |
-| `set_status` | Change status, optionally with a note (stored as a comment) or a third-party blocker (`null` clears it) |
-| `add_checklist_items` | Append checklist items |
-| `toggle_checklist_item` | Tick / untick a checklist item (idempotent) |
-| `add_comment` | Add a markdown comment (progress summaries) |
-| `link_tasks` | Add "blocked by" dependencies (cycles are rejected) |
-| `unlink_tasks` | Remove "blocked by" dependencies (the only removal tool) |
-| `create_project` | Create a project (optionally with notes and links) |
-| `update_project_notes` | Append to or replace the project notes |
-| `update_project_links` | Add or update project links (never removes) |
-| `list_shared_secrets` | List vault entries shared with Claude (requires an `allowSecrets` token) |
-| `get_shared_secret` | Read one shared secret, with a reason (access is logged) |
+| `get_context` | Snapshot of the current project: notes, links, counts, in progress, next up, blocked, in review |
+| `list_projects` / `get_project` | List projects / project detail with notes, links and client |
+| `list_tasks` / `search_tasks` / `get_task` | Filter, search and read tasks (checklist, dependencies, comments, version) |
+| `create_task` / `update_task` / `set_status` | Create and update tasks; updates carry `expectedVersion` (conflict-safe) |
+| `add_checklist_items` / `toggle_checklist_item` | Manage checklists |
+| `add_comment` | Markdown comment, e.g. a progress summary |
+| `link_tasks` / `unlink_tasks` | "Blocked by" dependencies (cycles are rejected) |
+| `create_project` / `update_project_notes` / `update_project_links` | Create projects and keep their notes and links current |
+| `list_shared_secrets` / `get_shared_secret` | Vault entries explicitly shared with Claude (opt-in token, logged) |
 
-Prompts: `/mcp__task-manager__next-task` (pick the next task and start it) and `/mcp__task-manager__wrap-up`
-(sync status, checklist and a summary comment). Full reference: [docs/mcp.md](docs/mcp.md).
+Prompts: `next-task` (pick the next task and start it) and `wrap-up` (sync status, checklist and a summary
+comment). Nothing deletes tasks, projects, comments or secrets. Full reference: [docs/mcp.md](docs/mcp.md).
 
-### Suggested `CLAUDE.md` snippet for each repo
+</details>
 
-```markdown
-## Task Manager
-
-This repo is tracked in Task Manager (MCP server `task-manager`, default project from `X-TM-Project`).
-
-- Call `get_context` at the start of every session.
-- Before working, find the matching task (`search_tasks`) or create one (type, size, executor `ai`).
-- Move it to `in_progress` when you start and tick checklist items as you complete them.
-- When finished, set `in_review` (or `done`) and `add_comment` with a summary: files, commits, decisions.
-- Always pass `expectedVersion`; on a conflict re-read the task and merge, never overwrite blindly.
-- Do not change priority, due date or assignee unless asked. Never paste secrets in chat, files or commits.
-```
-
-## Security model
+<details>
+<summary><strong>Security model</strong></summary>
 
 | | Owner | Commenter | Viewer | Public link | MCP token |
 |---|---|---|---|---|---|
 | See projects and tasks | all | invited projects | invited projects | that project's tasks | all |
-| Notes, links, client | yes | yes | yes | no | yes |
 | Create / edit tasks | yes | no | no | no | yes |
 | Comments | read / write | read / write | read | no | read / write |
 | Edit project fields, delete, archive | yes | no | no | no | no |
 | Vault | yes (reveal logged) | no | no | no | shared secrets only, with `allowSecrets` (logged) |
 | Members, share links, tokens | yes | no | no | no | no |
 
-- **Login gate**: only `NUXT_OWNER_GITHUB_LOGIN` (then pinned by GitHub id) and invited GitHub users can log in.
-- **Vault**: secrets are encrypted with AES-256-GCM (random 12-byte IV, the account id as AAD) using
-  `NUXT_VAULT_KEY`, which lives only in the environment. Revealing requires a click and is logged. Claude can read
-  a secret only when the entry is flagged **share with Claude** (off by default) *and* the token has
-  **Allow secrets**; every access records time, source and count. Losing the key makes secrets unrecoverable.
-- **API tokens** (`tm_...`) are shown once and stored as SHA-256 hashes; they can expire and be revoked.
-  `/mcp` accepts bearer tokens only and never reads cookies.
-- **CSRF**: cookie-authenticated writes must pass an Origin check; sessions are sealed cookies.
-- **Public links** are random, read-only, revocable, `noindex`, and never expose notes, comments, the vault or
-  dependencies on other projects.
-- **Markdown** is always rendered through a sanitizing pipeline (links limited to http(s), mailto and anchors).
+- **Login gate**: only the owner (`NUXT_OWNER_GITHUB_LOGIN`, then pinned by GitHub id) and invited GitHub users.
+- **Vault**: AES-256-GCM with `NUXT_VAULT_KEY`, which lives only in the environment. Claude can read a secret only
+  when the entry is flagged *share with Claude* (off by default) **and** the token has *Allow secrets*; every
+  access is recorded. Losing the key makes the secrets unrecoverable.
+- **API tokens** (`tm_...`) are shown once, stored as SHA-256 hashes, can expire and be revoked. `/mcp` is
+  bearer-only and never reads cookies.
+- **Web**: sealed cookie sessions, Origin check on writes (CSRF), security headers, per-IP rate limits on public
+  endpoints, markdown always sanitized.
+- **Public links** are random, read-only, revocable and `noindex`; they never expose notes, comments or the vault.
 
-## Deploy
+Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
-Free setup: Turso (database) + Netlify or Vercel. Step by step guide: [docs/deploy.md](docs/deploy.md).
+</details>
 
-## Scripts
+<details>
+<summary><strong>Scripts</strong></summary>
 
 | Script | Description |
 |---|---|
 | `pnpm run setup` | First-run wizard: env file, keys, GitHub OAuth App, database |
 | `pnpm dev` | Dev server on http://localhost:3000 |
 | `pnpm build` / `pnpm preview` | Production build / preview it locally |
-| `pnpm typecheck` | Type-check the whole project |
-| `pnpm lint` / `pnpm lint:fix` | ESLint (stylistic) |
+| `pnpm lint` / `pnpm lint:fix` | ESLint |
+| `pnpm typecheck` | Type-check the app and the scripts |
 | `pnpm test` / `pnpm test:watch` / `pnpm test:coverage` | Vitest |
 | `pnpm db:generate` | Generate a migration from `server/db/schema.ts` |
 | `pnpm db:migrate` | Apply migrations to `NUXT_DATABASE_URL` and ensure the Inbox |
 | `pnpm db:seed [--demo]` | Ensure the Inbox (and optionally create demo projects) |
 | `pnpm db:studio` | Drizzle Studio |
 | `pnpm gen:keys` | Print a new `NUXT_SESSION_PASSWORD` and `NUXT_VAULT_KEY` |
-| `pnpm connect <folder> [slug]` | Write the MCP config of another folder (slug defaults to the folder name) |
+| `pnpm connect <folder> [slug]` | Write the MCP config of a folder for Claude Code |
 | `pnpm service:<install\|update\|start\|stop\|restart\|status\|logs\|uninstall>` | Always-on local service (Windows) |
 
-## Project structure
+</details>
+
+<details>
+<summary><strong>Project structure</strong></summary>
 
 ```
 task-manager/
-├── app/                    # Nuxt app: pages, layouts, components, composables, stores, utils
-├── i18n/locales/           # es / en translations
+├── app/              # Nuxt app: pages, layouts, components, composables, stores, utils
+├── i18n/locales/     # es / en translations
 ├── server/
-│   ├── api/                # REST endpoints (thin: validate -> service -> DTO)
-│   ├── db/                 # Drizzle schema, client, migrations
-│   ├── mcp/                # MCP server: instructions, tools, prompts
-│   ├── routes/             # /mcp endpoint, GitHub OAuth
-│   ├── services/           # Domain logic shared by REST and MCP (+ tests)
-│   └── utils/              # crypto, actor resolution, HTTP helpers
-├── shared/                 # Enums, zod schemas, permissions, DTO types (server + app)
-├── scripts/                # setup, migrate, seed, gen-keys, connect, service (+ lib/ with tested helpers)
-├── docs/                   # MCP reference, deploy guide
-├── public/                 # Logo, favicon
-└── nuxt.config.ts
+│   ├── api/          # REST endpoints (thin: validate -> service -> DTO)
+│   ├── db/           # Drizzle schema, client, migrations
+│   ├── mcp/          # MCP server: instructions, tools, prompts
+│   ├── routes/       # /mcp endpoint, GitHub OAuth
+│   ├── services/     # Domain logic shared by REST and MCP (+ tests)
+│   └── utils/        # crypto, actor resolution, HTTP helpers
+├── shared/           # Enums, zod schemas, permissions, DTO types (server + app)
+├── scripts/          # setup, migrate, seed, gen-keys, connect, service (+ tested helpers in lib/)
+├── docs/             # MCP reference, deploy guide, screenshots
+└── public/           # Logo, favicon
 ```
 
-## Stack
+</details>
 
-- **Framework**: Nuxt 4 (Vue 3.5, Nitro), TypeScript strict
-- **Database**: Drizzle ORM + libSQL (SQLite locally, Turso in the cloud)
-- **MCP**: `@modelcontextprotocol/server` (stateless Streamable HTTP) + zod 4
-- **Auth**: `nuxt-auth-utils` (GitHub OAuth, sealed cookie sessions)
-- **UI**: Tailwind CSS 4, Pinia, `vue-draggable-plus`, `@nuxtjs/i18n`
-- **Markdown**: unified, remark-gfm, rehype-sanitize
-- **Tooling**: Vitest, ESLint (`@nuxt/eslint`), pnpm, tsx
+<details>
+<summary><strong>Stack</strong></summary>
+
+Nuxt 4 (Vue 3.5, Nitro) and TypeScript strict · Drizzle ORM + libSQL (SQLite locally, Turso in the cloud) ·
+`@modelcontextprotocol/server` (stateless Streamable HTTP) + zod 4 · `nuxt-auth-utils` (GitHub OAuth) ·
+Tailwind CSS 4, Pinia, `@nuxtjs/i18n`, `vue-draggable-plus` · unified + rehype-sanitize · Vitest, ESLint, pnpm, tsx
+
+</details>
+
+## Screenshots
+
+| Tasks (table) | Task drawer | Project overview |
+|---|---|---|
+| ![All tasks in table view](docs/screenshots/tasks-table.png) | ![Task drawer with checklist, dependency and comment](docs/screenshots/task-drawer.png) | ![Project overview with notes, counts and links](docs/screenshots/project-overview.png) |
+
+## Contributing
+
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for the setup, the checks and the
+commit conventions. Changes are listed in the [CHANGELOG](CHANGELOG.md).
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) © Alberto Alonso

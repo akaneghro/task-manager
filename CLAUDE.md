@@ -28,7 +28,9 @@ GitHub users and through public read-only links.
 | `pnpm run setup` | First-run wizard: env file from `.env.example` (fresh keys + GitHub OAuth App; `--client-id`, `--client-secret`, `--login`, `--yes`, `--force`), then migrate + Inbox. Plain `pnpm setup` is pnpm's own command |
 | `pnpm dev` | Nuxt dev server on http://localhost:3000 |
 | `pnpm build` / `pnpm preview` | Production build / preview |
-| `pnpm typecheck` / `pnpm lint` / `pnpm test` | Must pass before committing |
+| `pnpm typecheck` / `pnpm lint` / `pnpm test` | Must pass before committing (CI runs them on Ubuntu + Windows) |
+| `pnpm lint:fix` / `pnpm test:watch` / `pnpm test:coverage` | ESLint autofix / Vitest watch / coverage |
+| `pnpm db:studio` | Drizzle Studio |
 | `pnpm db:generate` | Generate a migration from `server/db/schema.ts` |
 | `pnpm db:migrate` | Apply migrations to `NUXT_DATABASE_URL` |
 | `pnpm db:seed` | Ensure the Inbox project exists (+ optional demo data with `--demo`) |
@@ -54,7 +56,14 @@ server/routes/mcp.ts    MCP endpoint (bearer token only)
 server/mcp/             buildMcpServer(ctx), instructions, prompts, tools/*
 scripts/                setup.ts, connect.ts, gen-keys.ts, migrate.ts, seed.ts, service.ts (+ scripts/lib/* helpers, tested)
 i18n/locales/{es,en}/   app.json (shell, projects, settings, auth, public) and tasks.json (tasks UI)
+docs/                   mcp.md (MCP reference), deploy.md (Turso + Netlify/Vercel), screenshots/ (demo data only)
+.github/                workflows/ci.yml (lint, typecheck, test), issue/PR templates, dependabot.yml
 ```
+
+Public repo (`github.com/akaneghro/task-manager`, MIT): `README.md` is the newcomer entry point (quick start,
+connect Claude Code; details in `<details>` or `docs/`), plus `CONTRIBUTING.md`, `SECURITY.md` (private
+advisories) and `CHANGELOG.md` (Keep a Changelog: add user-visible changes under `Unreleased`). Keep every command
+mentioned there real, and screenshots and fixtures free of personal data or real secrets.
 
 ### Layering rules
 
