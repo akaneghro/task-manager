@@ -4,8 +4,6 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { createInterface } from 'node:readline/promises'
-import { Writable } from 'node:stream'
 import { slugSchema } from '../shared/schemas/common'
 import { ALL_PROJECTS } from '../shared/utils/enums'
 import { ArgsError, CONNECT_USAGE, parseConnectArgs } from './lib/args'
@@ -22,6 +20,7 @@ import {
   normalizeBaseUrl,
   redactToken,
 } from './lib/mcpConfig'
+import { askHidden, canPrompt } from './lib/prompt'
 
 const DEFAULT_BASE_URL = 'http://localhost:3000'
 const MCP_FILE = '.mcp.json'
@@ -36,28 +35,12 @@ function readTextIfExists(file: string): string | null {
   return existsSync(file) ? readFileSync(file, 'utf8') : null
 }
 
-/** Reads a line from the terminal without echoing it. */
-async function promptHidden(question: string): Promise<string> {
-  if (!process.stdin.isTTY) {
+/** Asks for the API token without echoing it. */
+async function promptToken(): Promise<string> {
+  if (!canPrompt()) {
     throw new ConnectError('No TTY to ask for the token. Set the TM_TOKEN environment variable and run again.')
   }
-  let muted = false
-  const output = new Writable({
-    write(chunk: Buffer | string, _encoding, callback) {
-      if (!muted) process.stdout.write(chunk)
-      callback()
-    },
-  })
-  const rl = createInterface({ input: process.stdin, output, terminal: true })
-  try {
-    process.stdout.write(question)
-    muted = true
-    return (await rl.question('')).trim()
-  }
-  finally {
-    rl.close()
-    process.stdout.write('\n')
-  }
+  return askHidden('Task Manager API token (input hidden): ')
 }
 
 interface CheckResult {
@@ -146,7 +129,7 @@ async function run(options: ConnectOptions): Promise<void> {
 
   // 3) Token
   const fromEnv = process.env.TM_TOKEN?.trim()
-  const token = fromEnv || await promptHidden('Task Manager API token (input hidden): ')
+  const token = fromEnv || await promptToken()
   if (!token) throw new ConnectError('No token given. Create one in Task Manager > Settings > API tokens.')
   if (!token.startsWith('tm_')) warn('The token does not start with "tm_"; double-check you pasted a Task Manager API token.')
 

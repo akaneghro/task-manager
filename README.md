@@ -39,31 +39,29 @@
 ## Quick start
 
 ```bash
-# 1. Install dependencies
 pnpm install
-
-# 2. Create your local environment file from the example
-cp .env.example .env            # PowerShell: Copy-Item .env.example .env
-
-# 3. Generate the session password and the vault key, paste them into the file
-pnpm gen:keys
+pnpm run setup      # first-run wizard (note the "run": plain `pnpm setup` is a pnpm built-in)
+pnpm dev            # http://localhost:3000
 ```
 
-4. Create a GitHub OAuth App at **GitHub → Settings → Developer settings → OAuth Apps**:
-   - Homepage URL: `http://localhost:3000`
-   - Authorization callback URL: `http://localhost:3000/auth/github`
+`pnpm run setup` creates your local env file from `.env.example` with a fresh session password and vault key,
+walks you through creating a [GitHub OAuth App](https://github.com/settings/applications/new)
+(Homepage URL `http://localhost:3000`, callback URL `http://localhost:3000/auth/github`), asks for its client
+id/secret (hidden) and your GitHub username, and creates the local SQLite database (`data/task-manager.db`) with
+the Inbox. It never prints secrets; an existing env file is kept unless you choose to overwrite it (a backup is
+saved). For scripted installs: `pnpm run setup --client-id <id> --client-secret <secret> --login <you> --yes`.
 
-   Put its client id/secret in `NUXT_OAUTH_GITHUB_CLIENT_ID` / `NUXT_OAUTH_GITHUB_CLIENT_SECRET` and your GitHub
-   username in `NUXT_OWNER_GITHUB_LOGIN`.
+Optional: `pnpm db:seed --demo` adds two demo projects with sample tasks.
 
-```bash
-# 5. Create the local SQLite database (data/task-manager.db) and the Inbox
-pnpm db:migrate
-pnpm db:seed --demo             # optional: two demo projects with sample tasks
+<details>
+<summary>Manual setup</summary>
 
-# 6. Start the app on http://localhost:3000
-pnpm dev
-```
+1. Copy `.env.example` to `.env` and paste the output of `pnpm gen:keys` into it.
+2. Create the GitHub OAuth App (URLs above) and set `NUXT_OAUTH_GITHUB_CLIENT_ID`,
+   `NUXT_OAUTH_GITHUB_CLIENT_SECRET` and `NUXT_OWNER_GITHUB_LOGIN` (your GitHub username).
+3. `pnpm db:migrate` creates the database and the Inbox.
+
+</details>
 
 ## Always-on local service (Windows)
 
@@ -195,6 +193,7 @@ Free setup: Turso (database) + Netlify or Vercel. Step by step guide: [docs/depl
 
 | Script | Description |
 |---|---|
+| `pnpm run setup` | First-run wizard: env file, keys, GitHub OAuth App, database |
 | `pnpm dev` | Dev server on http://localhost:3000 |
 | `pnpm build` / `pnpm preview` | Production build / preview it locally |
 | `pnpm typecheck` | Type-check the whole project |
@@ -222,7 +221,7 @@ task-manager/
 │   ├── services/           # Domain logic shared by REST and MCP (+ tests)
 │   └── utils/              # crypto, actor resolution, HTTP helpers
 ├── shared/                 # Enums, zod schemas, permissions, DTO types (server + app)
-├── scripts/                # migrate, seed, gen-keys, connect (+ lib/ with tested helpers)
+├── scripts/                # setup, migrate, seed, gen-keys, connect, service (+ lib/ with tested helpers)
 ├── docs/                   # MCP reference, deploy guide
 ├── public/                 # Logo, favicon
 └── nuxt.config.ts

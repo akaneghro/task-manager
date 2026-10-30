@@ -25,6 +25,7 @@ GitHub users and through public read-only links.
 
 | Script | What |
 |---|---|
+| `pnpm run setup` | First-run wizard: env file from `.env.example` (fresh keys + GitHub OAuth App; `--client-id`, `--client-secret`, `--login`, `--yes`, `--force`), then migrate + Inbox. Plain `pnpm setup` is pnpm's own command |
 | `pnpm dev` | Nuxt dev server on http://localhost:3000 |
 | `pnpm build` / `pnpm preview` | Production build / preview |
 | `pnpm typecheck` / `pnpm lint` / `pnpm test` | Must pass before committing |
@@ -51,7 +52,7 @@ server/utils/           Nitro helpers: db.ts (useDb), crypto.ts, actor.ts (sessi
 server/api/**           REST endpoints (thin: validate with zod -> call service -> return DTO)
 server/routes/mcp.ts    MCP endpoint (bearer token only)
 server/mcp/             buildMcpServer(ctx), instructions, prompts, tools/*
-scripts/                connect.ts, gen-keys.ts, migrate.ts, seed.ts (+ scripts/lib/* pure, tested)
+scripts/                setup.ts, connect.ts, gen-keys.ts, migrate.ts, seed.ts, service.ts (+ scripts/lib/* helpers, tested)
 i18n/locales/{es,en}/   app.json (shell, projects, settings, auth, public) and tasks.json (tasks UI)
 ```
 

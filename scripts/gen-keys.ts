@@ -1,18 +1,14 @@
 // Prints fresh secrets for the local environment file. Usage: pnpm gen:keys
-// Nothing is written to disk: copy the lines yourself.
+// Nothing is written to disk: copy the lines yourself (or let `pnpm run setup` write them).
 
-import { generateSessionPassword, generateVaultKey } from '../server/utils/crypto'
+import { generateEnvSecrets, VAULT_KEY_WARNING } from './lib/setup'
 
+const secrets = generateEnvSecrets()
 const lines = [
   '# Paste these lines into your environment file (see .env.example). Do not commit them.',
-  `NUXT_SESSION_PASSWORD=${generateSessionPassword()}`,
-  `NUXT_VAULT_KEY=${generateVaultKey()}`,
+  `NUXT_SESSION_PASSWORD=${secrets.NUXT_SESSION_PASSWORD}`,
+  `NUXT_VAULT_KEY=${secrets.NUXT_VAULT_KEY}`,
 ]
 
 console.log(lines.join('\n'))
-console.warn([
-  '',
-  'WARNING: keep NUXT_VAULT_KEY safe (e.g. in your password manager).',
-  '  Vault secrets are encrypted with it: if you lose or change it, every stored secret becomes unrecoverable.',
-  '  Changing NUXT_SESSION_PASSWORD only logs everybody out.',
-].join('\n'))
+console.warn(`\n${VAULT_KEY_WARNING}`)
