@@ -1,1 +1,238 @@
-{}
+{
+  "tasks": {
+    "title": "Tasks",
+    "allTitle": "All tasks",
+    "projectTitle": "{project} tasks",
+    "count": "No tasks | {count} task | {count} tasks",
+    "loading": "Loading tasks…",
+    "loadError": "Could not load the tasks",
+    "retry": "Retry",
+    "shortcutsHint": "N: new task · /: search",
+    "empty": {
+      "title": "No tasks",
+      "description": "Create the first one with the “New task” field or by pressing N.",
+      "filtered": "No task matches the filters.",
+      "readonly": "This project has no visible tasks."
+    },
+    "status": {
+      "backlog": "Backlog",
+      "todo": "To do",
+      "in_progress": "In progress",
+      "in_review": "In review",
+      "blocked": "Blocked",
+      "done": "Done",
+      "cancelled": "Cancelled"
+    },
+    "priority": {
+      "urgent": "Urgent",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "type": {
+      "feature": "Feature",
+      "bug": "Bug",
+      "test": "Test",
+      "idea": "Idea",
+      "maintenance": "Maintenance",
+      "docs": "Docs"
+    },
+    "size": {
+      "XS": "XS",
+      "S": "S",
+      "M": "M",
+      "L": "L",
+      "XL": "XL",
+      "none": "No size"
+    },
+    "executor": {
+      "ai": "AI",
+      "human": "Human",
+      "mixed": "Mixed"
+    },
+    "assignee": {
+      "none": "Unassigned",
+      "owner": "Me",
+      "claude": "Claude",
+      "member": "Member",
+      "external": "External",
+      "externalName": "External assignee name",
+      "externalPlaceholder": "Name…"
+    },
+    "fields": {
+      "key": "Key",
+      "title": "Title",
+      "project": "Project",
+      "status": "Status",
+      "priority": "Priority",
+      "type": "Type",
+      "size": "Size",
+      "executor": "Executor",
+      "assignee": "Assignee",
+      "due": "Due date",
+      "updated": "Updated",
+      "created": "Created",
+      "description": "Description",
+      "checklist": "Checklist",
+      "dependencies": "Dependencies",
+      "comments": "Comments",
+      "blocker": "External blocker"
+    },
+    "sort": {
+      "label": "Sort by",
+      "priority": "Priority",
+      "due": "Due date",
+      "updated": "Last updated",
+      "created": "Created date",
+      "position": "Position",
+      "key": "Key",
+      "by": "Sort by {field}"
+    },
+    "view": {
+      "label": "View",
+      "table": "Table",
+      "board": "Board"
+    },
+    "filters": {
+      "label": "Filters",
+      "search": "Search tasks…",
+      "searchLabel": "Search tasks",
+      "includeClosed": "Include closed",
+      "clear": "Clear filters",
+      "allProjects": "All projects",
+      "active": "No filters | {count} filter | {count} filters",
+      "results": "{shown} of {total}",
+      "selected": "{count} sel."
+    },
+    "table": {
+      "label": "Task list",
+      "checklist": "Checklist: {progress}",
+      "blocked": "Blocked",
+      "comments": "No comments | {count} comment | {count} comments",
+      "overdue": "Overdue",
+      "noDue": "No date",
+      "open": "Open {key}"
+    },
+    "board": {
+      "label": "Task board",
+      "collapse": "Collapse column",
+      "expand": "Expand column",
+      "dropHere": "Drop here",
+      "empty": "No tasks",
+      "moveConflict": "The task changed elsewhere; the board has been reloaded.",
+      "readonlyCard": "Read only"
+    },
+    "card": {
+      "blockedBy": "Blocked by {keys}",
+      "waitingOn": "Waiting on {who}",
+      "due": "Due {date}"
+    },
+    "quickAdd": {
+      "label": "New task",
+      "placeholder": "New task…",
+      "project": "Project of the new task",
+      "add": "Add",
+      "more": "More options",
+      "created": "Task {key} created"
+    },
+    "form": {
+      "title": "New task",
+      "create": "Create task",
+      "cancel": "Cancel",
+      "titlePlaceholder": "What needs to be done?",
+      "descriptionPlaceholder": "Context, acceptance criteria… (markdown)",
+      "checklistHint": "One item per line",
+      "noDue": "No date"
+    },
+    "detail": {
+      "editTitle": "Edit title",
+      "titleLabel": "Task title",
+      "save": "Save",
+      "cancel": "Cancel",
+      "edit": "Edit",
+      "delete": "Delete task",
+      "deleteConfirmTitle": "Delete the task?",
+      "deleteConfirmMessage": "Task {key} will disappear from every view.",
+      "deleted": "Task {key} deleted",
+      "openFull": "Open full page",
+      "close": "Close",
+      "back": "Back to tasks",
+      "notFound": "Task not found",
+      "notFoundDescription": "It does not exist or you have no access.",
+      "noDescription": "No description.",
+      "descriptionPlaceholder": "Describe the task (markdown)…",
+      "clearDue": "Clear date",
+      "copyKey": "Copy key",
+      "copied": "Copied",
+      "readonly": "Read only"
+    },
+    "blocker": {
+      "title": "External blocker",
+      "who": "Who",
+      "what": "What we are waiting for",
+      "since": "Since",
+      "whoPlaceholder": "Client, provider…",
+      "whatPlaceholder": "What is missing to continue",
+      "save": "Save blocker",
+      "remove": "Remove blocker",
+      "add": "Add external blocker",
+      "waitingOn": "Waiting on {who}",
+      "none": "No external blocker"
+    },
+    "checklist": {
+      "add": "Add",
+      "placeholder": "New item…",
+      "newItem": "New checklist item",
+      "empty": "No items",
+      "delete": "Delete item",
+      "edit": "Edit item",
+      "toggle": "Toggle “{text}”",
+      "reorder": "Drag to reorder",
+      "progress": "{done}/{total}"
+    },
+    "deps": {
+      "blockedBy": "Blocked by",
+      "blocking": "Blocking",
+      "add": "Add “blocked by”",
+      "searchLabel": "Search the task that blocks this one",
+      "searchPlaceholder": "Search by key or title…",
+      "noResults": "No results",
+      "remove": "Remove dependency",
+      "hidden": "+{count} hidden | +{count} hidden | +{count} hidden",
+      "hiddenTitle": "Dependencies in projects you cannot see",
+      "none": "No dependencies"
+    },
+    "comments": {
+      "title": "Comments",
+      "empty": "No comments yet.",
+      "placeholder": "Write a comment (markdown)…",
+      "add": "Comment",
+      "edit": "Edit comment",
+      "delete": "Delete comment",
+      "save": "Save",
+      "cancel": "Cancel",
+      "deleteConfirmTitle": "Delete the comment?",
+      "deleteConfirmMessage": "This cannot be undone.",
+      "edited": "edited",
+      "claude": "Claude ({name})",
+      "unknownAuthor": "User"
+    },
+    "conflict": {
+      "title": "This task has changed",
+      "message": "It was modified elsewhere (another tab or Claude) while you were editing. Current values on the server:",
+      "by": "Last change: {who}",
+      "useTheirs": "Use theirs",
+      "overwrite": "Overwrite mine",
+      "dismiss": "Dismiss",
+      "empty": "(empty)",
+      "changed": "(changed)"
+    },
+    "meta": {
+      "created": "Created by {who} {when}",
+      "updated": "Updated by {who} {when}",
+      "claude": "Claude ({name})",
+      "you": "you",
+      "user": "a user"
+    }
+  }
+}

@@ -1,1 +1,238 @@
-{}
+{
+  "tasks": {
+    "title": "Tareas",
+    "allTitle": "Todas las tareas",
+    "projectTitle": "Tareas de {project}",
+    "count": "Ninguna tarea | {count} tarea | {count} tareas",
+    "loading": "Cargando tareas…",
+    "loadError": "No se pudieron cargar las tareas",
+    "retry": "Reintentar",
+    "shortcutsHint": "N: nueva tarea · /: buscar",
+    "empty": {
+      "title": "No hay tareas",
+      "description": "Crea la primera con el campo «Nueva tarea» o pulsando N.",
+      "filtered": "Ninguna tarea coincide con los filtros.",
+      "readonly": "Este proyecto no tiene tareas visibles."
+    },
+    "status": {
+      "backlog": "Backlog",
+      "todo": "Por hacer",
+      "in_progress": "En curso",
+      "in_review": "En revisión",
+      "blocked": "Bloqueada",
+      "done": "Hecha",
+      "cancelled": "Cancelada"
+    },
+    "priority": {
+      "urgent": "Urgente",
+      "high": "Alta",
+      "medium": "Media",
+      "low": "Baja"
+    },
+    "type": {
+      "feature": "Funcionalidad",
+      "bug": "Error",
+      "test": "Test",
+      "idea": "Idea",
+      "maintenance": "Mantenimiento",
+      "docs": "Documentación"
+    },
+    "size": {
+      "XS": "XS",
+      "S": "S",
+      "M": "M",
+      "L": "L",
+      "XL": "XL",
+      "none": "Sin talla"
+    },
+    "executor": {
+      "ai": "IA",
+      "human": "Humano",
+      "mixed": "Mixto"
+    },
+    "assignee": {
+      "none": "Sin asignar",
+      "owner": "Yo",
+      "claude": "Claude",
+      "member": "Miembro",
+      "external": "Externo",
+      "externalName": "Nombre del responsable externo",
+      "externalPlaceholder": "Nombre…"
+    },
+    "fields": {
+      "key": "Clave",
+      "title": "Título",
+      "project": "Proyecto",
+      "status": "Estado",
+      "priority": "Prioridad",
+      "type": "Tipo",
+      "size": "Talla",
+      "executor": "Ejecuta",
+      "assignee": "Responsable",
+      "due": "Fecha límite",
+      "updated": "Actualizada",
+      "created": "Creada",
+      "description": "Descripción",
+      "checklist": "Checklist",
+      "dependencies": "Dependencias",
+      "comments": "Comentarios",
+      "blocker": "Bloqueo externo"
+    },
+    "sort": {
+      "label": "Ordenar por",
+      "priority": "Prioridad",
+      "due": "Fecha límite",
+      "updated": "Última actualización",
+      "created": "Fecha de creación",
+      "position": "Posición",
+      "key": "Clave",
+      "by": "Ordenar por {field}"
+    },
+    "view": {
+      "label": "Vista",
+      "table": "Tabla",
+      "board": "Tablero"
+    },
+    "filters": {
+      "label": "Filtros",
+      "search": "Buscar tareas…",
+      "searchLabel": "Buscar tareas",
+      "includeClosed": "Incluir cerradas",
+      "clear": "Limpiar filtros",
+      "allProjects": "Todos los proyectos",
+      "active": "Sin filtros | {count} filtro | {count} filtros",
+      "results": "{shown} de {total}",
+      "selected": "{count} sel."
+    },
+    "table": {
+      "label": "Lista de tareas",
+      "checklist": "Checklist: {progress}",
+      "blocked": "Bloqueada",
+      "comments": "Sin comentarios | {count} comentario | {count} comentarios",
+      "overdue": "Vencida",
+      "noDue": "Sin fecha",
+      "open": "Abrir {key}"
+    },
+    "board": {
+      "label": "Tablero de tareas",
+      "collapse": "Contraer columna",
+      "expand": "Expandir columna",
+      "dropHere": "Suelta aquí",
+      "empty": "Sin tareas",
+      "moveConflict": "La tarea cambió en otro sitio; se ha recargado el tablero.",
+      "readonlyCard": "Solo lectura"
+    },
+    "card": {
+      "blockedBy": "Bloqueada por {keys}",
+      "waitingOn": "Esperando a {who}",
+      "due": "Vence {date}"
+    },
+    "quickAdd": {
+      "label": "Nueva tarea",
+      "placeholder": "Nueva tarea…",
+      "project": "Proyecto de la nueva tarea",
+      "add": "Añadir",
+      "more": "Más opciones",
+      "created": "Tarea {key} creada"
+    },
+    "form": {
+      "title": "Nueva tarea",
+      "create": "Crear tarea",
+      "cancel": "Cancelar",
+      "titlePlaceholder": "¿Qué hay que hacer?",
+      "descriptionPlaceholder": "Contexto, criterios de aceptación… (markdown)",
+      "checklistHint": "Un elemento por línea",
+      "noDue": "Sin fecha"
+    },
+    "detail": {
+      "editTitle": "Editar título",
+      "titleLabel": "Título de la tarea",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "edit": "Editar",
+      "delete": "Eliminar tarea",
+      "deleteConfirmTitle": "¿Eliminar la tarea?",
+      "deleteConfirmMessage": "La tarea {key} desaparecerá de todas las vistas.",
+      "deleted": "Tarea {key} eliminada",
+      "openFull": "Abrir en página completa",
+      "close": "Cerrar",
+      "back": "Volver a tareas",
+      "notFound": "Tarea no encontrada",
+      "notFoundDescription": "No existe o no tienes acceso.",
+      "noDescription": "Sin descripción.",
+      "descriptionPlaceholder": "Describe la tarea (markdown)…",
+      "clearDue": "Quitar fecha",
+      "copyKey": "Copiar clave",
+      "copied": "Copiado",
+      "readonly": "Solo lectura"
+    },
+    "blocker": {
+      "title": "Bloqueo externo",
+      "who": "Quién",
+      "what": "Qué se espera",
+      "since": "Desde",
+      "whoPlaceholder": "Cliente, proveedor…",
+      "whatPlaceholder": "Qué falta para seguir",
+      "save": "Guardar bloqueo",
+      "remove": "Quitar bloqueo",
+      "add": "Añadir bloqueo externo",
+      "waitingOn": "Esperando a {who}",
+      "none": "Sin bloqueo externo"
+    },
+    "checklist": {
+      "add": "Añadir",
+      "placeholder": "Nuevo elemento…",
+      "newItem": "Nuevo elemento de la checklist",
+      "empty": "Sin elementos",
+      "delete": "Eliminar elemento",
+      "edit": "Editar elemento",
+      "toggle": "Marcar «{text}»",
+      "reorder": "Arrastrar para reordenar",
+      "progress": "{done}/{total}"
+    },
+    "deps": {
+      "blockedBy": "Bloqueada por",
+      "blocking": "Bloquea a",
+      "add": "Añadir «bloqueada por»",
+      "searchLabel": "Buscar tarea que bloquea a esta",
+      "searchPlaceholder": "Buscar por clave o título…",
+      "noResults": "Sin resultados",
+      "remove": "Quitar dependencia",
+      "hidden": "+{count} oculta | +{count} oculta | +{count} ocultas",
+      "hiddenTitle": "Dependencias en proyectos que no puedes ver",
+      "none": "Sin dependencias"
+    },
+    "comments": {
+      "title": "Comentarios",
+      "empty": "Todavía no hay comentarios.",
+      "placeholder": "Escribe un comentario (markdown)…",
+      "add": "Comentar",
+      "edit": "Editar comentario",
+      "delete": "Eliminar comentario",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "deleteConfirmTitle": "¿Eliminar el comentario?",
+      "deleteConfirmMessage": "Esta acción no se puede deshacer.",
+      "edited": "editado",
+      "claude": "Claude ({name})",
+      "unknownAuthor": "Usuario"
+    },
+    "conflict": {
+      "title": "Esta tarea ha cambiado",
+      "message": "Se modificó en otro sitio (otra pestaña o Claude) mientras la editabas. Valores actuales en el servidor:",
+      "by": "Última modificación: {who}",
+      "useTheirs": "Usar los suyos",
+      "overwrite": "Sobrescribir con los míos",
+      "dismiss": "Cerrar aviso",
+      "empty": "(vacío)",
+      "changed": "(modificado)"
+    },
+    "meta": {
+      "created": "Creada por {who} {when}",
+      "updated": "Actualizada por {who} {when}",
+      "claude": "Claude ({name})",
+      "you": "ti",
+      "user": "un usuario"
+    }
+  }
+}

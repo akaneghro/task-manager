@@ -1,59 +1,72 @@
+// Light/dark mode. An explicit choice is kept in a cookie (so SSR renders the right toggle state and avoids a
+// hydration mismatch) and mirrored to localStorage (read by the pre-paint script in app.vue). Without an explicit
+// choice the system preference is applied after mount.
+
 const COLOR_MODE_KEY = 'task-manager-color-mode'
+export const COLOR_MODE_COOKIE = 'tm_color_mode'
 
 export type ColorMode = 'light' | 'dark'
 
-const colorMode = ref<ColorMode>('light')
-let initialized = false
+function isColorMode(value: unknown): value is ColorMode {
+  return value === 'light' || value === 'dark'
+}
+
+function applyDocumentClass(mode: ColorMode) {
+  if (import.meta.client) document.documentElement.classList.toggle('dark', mode === 'dark')
+}
+
+function readStoredMode(): ColorMode | null {
+  try {
+    const stored = localStorage.getItem(COLOR_MODE_KEY)
+    return isColorMode(stored) ? stored : null
+  }
+  catch {
+    return null
+  }
+}
 
 export function useColorMode() {
-  // Initialize from localStorage on first use
-  if (import.meta.client && !initialized) {
-    initialized = true
-    const stored = localStorage.getItem(COLOR_MODE_KEY)
-    if (stored === 'dark' || stored === 'light') {
-      colorMode.value = stored
-    }
-    else {
-      // Check system preference
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-      colorMode.value = prefersDark ? 'dark' : 'light'
-    }
+  const cookie = useCookie<string | null>(COLOR_MODE_COOKIE, {
+    default: () => null,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 60 * 60 * 24 * 365,
+  })
+  const mode = useState<ColorMode>('tm:color-mode', () => (isColorMode(cookie.value) ? cookie.value : 'light'))
 
-    // Apply to document
-    updateDocumentClass(colorMode.value)
+  if (import.meta.client && getCurrentInstance()) {
+    onMounted(() => {
+      if (!isColorMode(cookie.value)) {
+        const stored = readStoredMode()
+        if (stored) cookie.value = stored
+        mode.value = stored ?? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      }
+      applyDocumentClass(mode.value)
+    })
   }
 
-  function updateDocumentClass(mode: ColorMode) {
+  function set(next: ColorMode) {
+    mode.value = next
+    cookie.value = next
     if (import.meta.client) {
-      if (mode === 'dark') {
-        document.documentElement.classList.add('dark')
+      try {
+        localStorage.setItem(COLOR_MODE_KEY, next)
       }
-      else {
-        document.documentElement.classList.remove('dark')
+      catch {
+        // Storage may be unavailable (private mode); the cookie still keeps the choice.
       }
+      applyDocumentClass(next)
     }
   }
 
   function toggle() {
-    colorMode.value = colorMode.value === 'dark' ? 'light' : 'dark'
-    if (import.meta.client) {
-      localStorage.setItem(COLOR_MODE_KEY, colorMode.value)
-      updateDocumentClass(colorMode.value)
-    }
+    set(mode.value === 'dark' ? 'light' : 'dark')
   }
 
-  function set(mode: ColorMode) {
-    colorMode.value = mode
-    if (import.meta.client) {
-      localStorage.setItem(COLOR_MODE_KEY, mode)
-      updateDocumentClass(mode)
-    }
-  }
-
-  // Return reactive object that Vue can unwrap in templates
+  // Reactive object so templates can read `colorMode.value` without `.value.value`.
   return reactive({
     get value() {
-      return colorMode.value
+      return mode.value
     },
     toggle,
     set,
