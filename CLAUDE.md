@@ -16,6 +16,10 @@ GitHub users and through public read-only links.
 - **Styling**: Tailwind CSS 4 (CSS-first config in `app/assets/css/main.css`), `primary-*` = sky palette,
   `dark` class strategy, utilities `btn-primary`, `btn-secondary`, `btn-ghost`, `btn-danger`, `input`, `label`, `card`.
   No component library. Icons: `<Icon name="..." />` (inline SVG map in `app/components/Icon.vue`).
+- **Installable app**: `public/manifest.webmanifest` (linked in `nuxt.config.ts` `app.head`, `start_url` `/tasks`)
+  + `public/icons/` PNGs (192, 512, maskable 512) rendered from `public/favicon.svg`; tested by
+  `server/utils/__tests__/webManifest.test.ts`. No service worker on purpose (auth + polling). `theme-color`
+  follows the system preference, overridden in `app/app.vue` by an explicit light/dark choice.
 - **Kanban DnD**: `vue-draggable-plus`
 - **Markdown**: unified + remark-gfm + rehype-sanitize (always sanitized)
 - **Tests**: Vitest 5 (projects `server` = node, `app` = happy-dom); **Lint**: `@nuxt/eslint` (stylistic, no `any`)

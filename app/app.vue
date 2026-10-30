@@ -15,5 +15,13 @@ useHead({
   script: [{ innerHTML: COLOR_MODE_SCRIPT, tagPosition: 'head' }],
 })
 
-useColorMode()
+const colorMode = useColorMode()
+
+// nuxt.config.ts sets theme-color (installed app title bar) per system preference; an explicit light/dark choice
+// overrides both so the title bar matches the top bar (white / gray-950).
+useHead({
+  meta: () => (colorMode.explicit
+    ? [{ name: 'theme-color', content: colorMode.value === 'dark' ? '#030712' : '#ffffff' }]
+    : []),
+})
 </script>

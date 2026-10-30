@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Installable desktop app: a web app manifest (`public/manifest.webmanifest`) with 192/512 and maskable icons, so
+  Edge or Chrome can install Task Manager and pin it to the Windows taskbar with its own window and icon (no
+  service worker). The `theme-color` now follows the light/dark top bar.
+
 ## [0.1.0] - 2026-10-30
 
 First public release.

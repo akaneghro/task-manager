@@ -48,9 +48,13 @@ export default defineNuxtConfig({
       link: [
         { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
         { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
+        // Installable as a desktop app (Edge/Chrome "Install"), see public/manifest.webmanifest. No service worker.
+        { rel: 'manifest', href: '/manifest.webmanifest' },
       ],
       meta: [
-        { name: 'theme-color', content: '#0284c7' },
+        // Title bar of the installed app window: match the top bar (white / gray-950).
+        { name: 'theme-color', content: '#ffffff', media: '(prefers-color-scheme: light)' },
+        { name: 'theme-color', content: '#030712', media: '(prefers-color-scheme: dark)' },
       ],
     },
   },

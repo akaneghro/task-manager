@@ -33,12 +33,17 @@ export function useColorMode() {
     maxAge: 60 * 60 * 24 * 365,
   })
   const mode = useState<ColorMode>('tm:color-mode', () => (isColorMode(cookie.value) ? cookie.value : 'light'))
+  // Whether the mode is the user's choice (cookie/localStorage) rather than the system preference.
+  const explicit = useState<boolean>('tm:color-mode-explicit', () => isColorMode(cookie.value))
 
   if (import.meta.client && getCurrentInstance()) {
     onMounted(() => {
       if (!isColorMode(cookie.value)) {
         const stored = readStoredMode()
-        if (stored) cookie.value = stored
+        if (stored) {
+          cookie.value = stored
+          explicit.value = true
+        }
         mode.value = stored ?? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
       }
       applyDocumentClass(mode.value)
@@ -47,6 +52,7 @@ export function useColorMode() {
 
   function set(next: ColorMode) {
     mode.value = next
+    explicit.value = true
     cookie.value = next
     if (import.meta.client) {
       try {
@@ -67,6 +73,9 @@ export function useColorMode() {
   return reactive({
     get value() {
       return mode.value
+    },
+    get explicit() {
+      return explicit.value
     },
     toggle,
     set,
