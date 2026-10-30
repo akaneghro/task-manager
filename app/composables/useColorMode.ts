@@ -12,7 +12,8 @@ export function useColorMode() {
     const stored = localStorage.getItem(COLOR_MODE_KEY)
     if (stored === 'dark' || stored === 'light') {
       colorMode.value = stored
-    } else {
+    }
+    else {
       // Check system preference
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
       colorMode.value = prefersDark ? 'dark' : 'light'
@@ -26,7 +27,8 @@ export function useColorMode() {
     if (import.meta.client) {
       if (mode === 'dark') {
         document.documentElement.classList.add('dark')
-      } else {
+      }
+      else {
         document.documentElement.classList.remove('dark')
       }
     }
