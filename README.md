@@ -65,6 +65,24 @@ pnpm db:seed --demo             # optional: two demo projects with sample tasks
 pnpm dev
 ```
 
+## Always-on local service (Windows)
+
+Instead of running `pnpm dev` every day, install the app as a background service that starts hidden when you
+log in to Windows (Task Scheduler task `TaskManager`, production build, listening on `127.0.0.1:3000` only,
+restarted automatically if it crashes, logs in `data/logs/server.log`):
+
+```powershell
+pnpm service:install     # build + migrate + register the logon task + start now
+pnpm service:status      # task state, supervisor pid, HTTP check
+pnpm service:update      # after pulling or changing code: rebuild + migrate + restart
+pnpm service:restart     # after editing the env file
+pnpm service:logs        # last lines of the server log
+pnpm service:stop | service:start | service:uninstall
+```
+
+The service and `pnpm dev` both use port 3000: stop the service (`pnpm service:stop`) before developing the app
+itself, or set `TM_SERVICE_PORT` and add that port's callback URL to your GitHub OAuth App.
+
 ## Connecting Claude Code
 
 1. In the app open **Settings → API tokens** and create a token (shown once). Tick **Allow secrets** only if
@@ -184,6 +202,7 @@ Free setup: Turso (database) + Netlify or Vercel. Step by step guide: [docs/depl
 | `pnpm db:studio` | Drizzle Studio |
 | `pnpm gen:keys` | Print a new `NUXT_SESSION_PASSWORD` and `NUXT_VAULT_KEY` |
 | `pnpm connect <repo> <slug>` | Write the MCP config of another repository |
+| `pnpm service:<install\|update\|start\|stop\|restart\|status\|logs\|uninstall>` | Always-on local service (Windows) |
 
 ## Project structure
 

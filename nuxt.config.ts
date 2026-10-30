@@ -1,4 +1,34 @@
+import { readFileSync, realpathSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
+
+/**
+ * libSQL loads its prebuilt native binding (`@libsql/<platform>`) with a dynamic require that Nitro's file
+ * tracer cannot follow, so the production build would miss it. Resolve the binding installed for this
+ * platform and trace it explicitly.
+ */
+function libsqlNativeBindings(): string[] {
+  try {
+    // Neither package exports its package.json: walk from the real (pnpm) location of @libsql/client.
+    const clientDir = realpathSync(join(process.cwd(), 'node_modules', '@libsql', 'client'))
+    const libsqlEntry = createRequire(join(clientDir, 'package.json')).resolve('libsql')
+    const libsqlDir = dirname(libsqlEntry)
+    const pkg: { optionalDependencies?: Record<string, string> } = JSON.parse(readFileSync(join(libsqlDir, 'package.json'), 'utf8'))
+    const fromLibsql = createRequire(libsqlEntry)
+    return Object.keys(pkg.optionalDependencies ?? {}).flatMap((name) => {
+      try {
+        return [fromLibsql.resolve(name)]
+      }
+      catch {
+        return [] // not installed for this platform
+      }
+    })
+  }
+  catch {
+    return []
+  }
+}
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
@@ -62,6 +92,12 @@ export default defineNuxtConfig({
     '/api/public/**': { headers: { 'X-Robots-Tag': 'noindex, nofollow' } },
   },
   compatibilityDate: '2026-10-01',
+
+  nitro: {
+    externals: {
+      traceInclude: libsqlNativeBindings(),
+    },
+  },
 
   vite: {
     plugins: [tailwindcss()],

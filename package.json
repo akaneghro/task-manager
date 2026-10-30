@@ -25,7 +25,15 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx scripts/seed.ts",
     "gen:keys": "tsx scripts/gen-keys.ts",
-    "connect": "tsx scripts/connect.ts"
+    "connect": "tsx scripts/connect.ts",
+    "service:install": "tsx scripts/service.ts install",
+    "service:update": "tsx scripts/service.ts update",
+    "service:start": "tsx scripts/service.ts start",
+    "service:stop": "tsx scripts/service.ts stop",
+    "service:restart": "tsx scripts/service.ts restart",
+    "service:status": "tsx scripts/service.ts status",
+    "service:logs": "tsx scripts/service.ts logs",
+    "service:uninstall": "tsx scripts/service.ts uninstall"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",

@@ -39,3 +39,7 @@ coverage/
 # Misc
 nul
 *.log
+
+# Local service
+data/logs/
+data/service.pid

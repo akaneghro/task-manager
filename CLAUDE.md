@@ -33,6 +33,10 @@ GitHub users and through public read-only links.
 | `pnpm db:seed` | Ensure the Inbox project exists (+ optional demo data with `--demo`) |
 | `pnpm gen:keys` | Print a fresh `NUXT_SESSION_PASSWORD` and `NUXT_VAULT_KEY` |
 | `pnpm connect <repo> <slug>` | Write the MCP config (`.mcp.json`) of another repo |
+| `pnpm service:install` / `service:update` / `service:status` ... | Always-on local service: Windows logon task `TaskManager` -> `scripts/service-run.mjs` supervisor -> production build on `127.0.0.1:3000`, logs in `data/logs/` |
+
+The service and `pnpm dev` share port 3000: run `pnpm service:stop` before `pnpm dev`, and `pnpm service:update`
+after code changes so the running build is current.
 
 ## Architecture
 
