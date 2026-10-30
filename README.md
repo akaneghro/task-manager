@@ -110,6 +110,21 @@ and add that port's callback URL to your GitHub OAuth App.
 </details>
 
 <details>
+<summary><strong>Install as a desktop app (taskbar)</strong></summary>
+
+Task Manager ships a web app manifest, so Edge and Chrome can install it as an app with its own window and icon:
+
+1. Open http://localhost:3000 in Edge or Chrome.
+2. Install it. Edge: **⋯ → Apps → Install this site as an app**. Chrome: the install icon at the right of the
+   address bar (or **⋮ → Cast, save and share → Install page as app**).
+3. Right-click the running app in the taskbar → **Pin to taskbar** (it is also added to the Start menu).
+
+It opens in its own window with the Task Manager icon (listed as "Tasks" where space is short). It is the same web
+app, so the local service must be running. The same steps work for a deployed instance at its own URL.
+
+</details>
+
+<details>
 <summary><strong>Deploy</strong></summary>
 
 A free setup with Turso (database) and Netlify or Vercel (hosting) is described step by step in
