@@ -62,7 +62,7 @@ with `create_project` using that exact slug.
 | `--url <base>` | `TM_URL` or `http://localhost:3000` | Task Manager base URL |
 | `--name <name>` | `task-manager` | Server name inside `.mcp.json` (tools appear as `mcp__<name>__*`) |
 | `--env-token` | off | Do not store the token in the file; Claude Code expands `${TM_TOKEN}` from its environment |
-| `--force` | off | Write the config even if the server is unreachable or the project does not exist yet |
+| `--force` | off | Write the config even if the server is unreachable or returns an unexpected response |
 | `--dry-run` | off | Print what would change (token redacted) without writing |
 
 The token is taken from the `TM_TOKEN` environment variable or asked for interactively. The script:

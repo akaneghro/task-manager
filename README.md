@@ -77,7 +77,7 @@ Manual alternative:
 2. Connect the folder where you open Claude Code (the project slug defaults to the folder name):
 
    ```bash
-   pnpm connect C:\Work\my-site
+   pnpm connect C:/Work/my-site
    ```
 
    It asks for the token (or reads `TM_TOKEN`), writes `<folder>/.mcp.json` and adds it to that folder's
