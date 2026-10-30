@@ -1,9 +1,10 @@
 import { createClient } from '@libsql/client'
+import type { Client } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
 import type { LibSQLDatabase } from 'drizzle-orm/libsql'
 import * as schema from './schema'
 
-export type Db = LibSQLDatabase<typeof schema>
+export type Db = LibSQLDatabase<typeof schema> & { $client: Client }
 
 export interface DbConfig {
   url: string
