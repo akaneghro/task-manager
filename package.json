@@ -5,7 +5,26 @@
   "type": "module",
   "description": "Personal projects & tasks manager with an MCP server for Claude Code",
   "license": "MIT",
-  "author": "akaneghro",
+  "author": "Alberto Alonso",
+  "homepage": "https://github.com/akaneghro/task-manager#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/akaneghro/task-manager.git"
+  },
+  "bugs": {
+    "url": "https://github.com/akaneghro/task-manager/issues"
+  },
+  "keywords": [
+    "task-manager",
+    "project-management",
+    "kanban",
+    "mcp",
+    "model-context-protocol",
+    "claude-code",
+    "nuxt",
+    "freelancer",
+    "self-hosted"
+  ],
   "engines": {
     "node": ">=22.18.0"
   },
