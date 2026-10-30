@@ -57,7 +57,8 @@
       "member": "Member",
       "external": "External",
       "externalName": "External assignee name",
-      "externalPlaceholder": "Name…"
+      "externalPlaceholder": "Name…",
+      "members": "Project members"
     },
     "fields": {
       "key": "Key",
@@ -120,7 +121,8 @@
       "dropHere": "Drop here",
       "empty": "No tasks",
       "moveConflict": "The task changed elsewhere; the board has been reloaded.",
-      "readonlyCard": "Read only"
+      "readonlyCard": "Read only",
+      "truncated": "Showing {shown} of {total} tasks: the oldest closed ones do not fit on the board. Use the filters to narrow it down."
     },
     "card": {
       "blockedBy": "Blocked by {keys}",
@@ -164,7 +166,8 @@
       "clearDue": "Clear date",
       "copyKey": "Copy key",
       "copied": "Copied",
-      "readonly": "Read only"
+      "readonly": "Read only",
+      "loadError": "The task could not be loaded"
     },
     "blocker": {
       "title": "External blocker",
@@ -232,7 +235,8 @@
       "updated": "Updated by {who} {when}",
       "claude": "Claude ({name})",
       "you": "you",
-      "user": "a user"
+      "user": "a user",
+      "claudeOnly": "Claude"
     }
   }
 }

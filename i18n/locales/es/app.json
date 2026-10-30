@@ -119,7 +119,9 @@
     "descriptionPlaceholder": "¿De qué va este proyecto?",
     "saved": "Proyecto guardado",
     "conflict": "Otra persona (o Claude) modificó este proyecto. Se han cargado los datos actuales; revisa y vuelve a guardar.",
-    "inboxLocked": "El Inbox no se puede renombrar de slug ni archivar."
+    "inboxLocked": "El Inbox no se puede renombrar de slug ni archivar.",
+    "invalidName": "Escribe un nombre (máx. 120 caracteres).",
+    "invalidSlug": "Usa solo minúsculas, números y guiones."
   },
   "project": {
     "tabsLabel": "Secciones del proyecto",
@@ -190,7 +192,8 @@
     "revokeTitle": "¿Revocar el acceso de {login}?",
     "revokeBody": "Dejará de ver este proyecto inmediatamente.",
     "revoked": "Acceso revocado",
-    "empty": "Nadie más tiene acceso a este proyecto."
+    "empty": "Nadie más tiene acceso a este proyecto.",
+    "invalidLogin": "Escribe un usuario de GitHub válido (letras, números y guiones, máx. 39)."
   },
   "shareLinks": {
     "description": "Cualquiera con el enlace verá el proyecto y sus tareas en solo lectura (sin notas, cliente ni comentarios).",
@@ -274,7 +277,8 @@
     "revokeBody": "Las sesiones de Claude que lo usen dejarán de funcionar.",
     "revoked": "Token revocado",
     "secretsBadge": "Secretos",
-    "forbidden": "Solo el propietario puede gestionar tokens."
+    "forbidden": "Solo el propietario puede gestionar tokens.",
+    "invalidName": "Escribe un nombre para el token (máx. 60 caracteres)."
   },
   "connect": {
     "title": "Conectar un repositorio",
@@ -327,6 +331,30 @@
     "pageNotFound": "Página no encontrada",
     "pageNotFoundHint": "La página que buscas no existe o se ha movido.",
     "pageError": "Ha ocurrido un error",
-    "backHome": "Ir al inicio"
+    "backHome": "Ir al inicio",
+    "rateLimited": "Demasiadas peticiones. Espera un momento y vuelve a intentarlo.",
+    "invalidField": "Revisa el campo «{field}».",
+    "reasons": {
+      "self_link": "Una tarea no puede bloquearse a sí misma.",
+      "dependency_cycle": "Esa dependencia crearía un ciclo (las tareas acabarían bloqueándose entre sí).",
+      "reserved_slug": "Ese slug está reservado (inbox, all). Elige otro.",
+      "reserved_key": "Esa clave está reservada. Elige otra.",
+      "slug_taken": "Ya hay otro proyecto con ese slug.",
+      "slug_deleted": "Ese slug sigue reservado por un proyecto eliminado. Elige otro.",
+      "key_taken": "Ya hay otro proyecto con esa clave.",
+      "key_deleted": "Esa clave sigue reservada por un proyecto eliminado. Elige otra.",
+      "project_exists": "Ya existe un proyecto con ese slug o esa clave.",
+      "slug_underivable": "No se puede generar un slug a partir del nombre: escribe uno.",
+      "inbox_slug": "El slug del Inbox no se puede cambiar.",
+      "inbox_archive": "El Inbox no se puede archivar.",
+      "inbox_delete": "El Inbox no se puede eliminar.",
+      "too_many_links": "Como máximo 30 enlaces por proyecto.",
+      "owner_invite": "Eres el propietario: ya tienes acceso total y no hace falta invitarte.",
+      "already_member": "Ese usuario ya tiene acceso a este proyecto.",
+      "token_name_taken": "Ya tienes un token con ese nombre.",
+      "secret_not_shared": "Este secreto no está compartido con Claude.",
+      "vault_unavailable": "La bóveda no está disponible: revisa la clave de cifrado del servidor (NUXT_VAULT_KEY).",
+      "not_a_member": "Esa persona no es un miembro activo de este proyecto."
+    }
   }
 }

@@ -8,6 +8,7 @@ import { taskFiltersToApiQuery, useTaskFilters, useTaskView } from './useTaskFil
 import { useAutoRefresh } from './useAutoRefresh'
 import { useShortcuts } from './useShortcuts'
 import { taskDataKey } from './useTask'
+import { projectDataKey } from './useProject'
 import { toTaskSummary } from '../utils/taskDisplay'
 import { useUiStore } from '../stores/ui'
 
@@ -15,7 +16,10 @@ export interface UseTasksOptions {
   /** Fixed project slug (project page). Omit on the global page. */
   project?: MaybeRefOrGetter<string | null | undefined>
   filters: MaybeRefOrGetter<TaskFilters>
-  /** The board always needs done/cancelled to fill its columns. */
+  /**
+   * The board always needs done/cancelled to fill its columns. They are then sorted after the open tasks, so
+   * the list limit can only ever cut closed cards, never open work.
+   */
   forceIncludeClosed?: MaybeRefOrGetter<boolean>
 }
 
@@ -24,11 +28,12 @@ export function useTasks(options: UseTasksOptions) {
   const query = computed(() => taskFiltersToApiQuery(toValue(options.filters), {
     projectSlug: projectSlug.value,
     forceIncludeClosed: toValue(options.forceIncludeClosed) ?? false,
+    closedLast: toValue(options.forceIncludeClosed) ?? false,
     limit: 500,
   }))
 
   const { data, pending, error, refresh, status } = useFetch<TaskListDto>('/api/tasks', {
-    key: `tasks-list:${projectSlug.value ?? 'all'}`,
+    key: projectSlug.value ? `tasks-list:project:${projectSlug.value}` : 'tasks-list:global',
     query,
     default: () => ({ items: [], total: 0 }),
   })
@@ -79,6 +84,13 @@ export function useTaskListPage(options: { projectSlug?: string | null } = {}) {
     return editableProjectIds.value.has(task.projectId)
   }
 
+  /**
+   * Whether the quick-add box / `N` shortcut make sense here: an editable project (this one on a project page, any
+   * non-archived one on the global page). Invited members are read-only, so they never get it.
+   */
+  const canCreate = computed(() => projects.value.some(p => (p.capabilities?.edit ?? false)
+    && (projectSlug === null ? p.status !== 'archived' : p.slug === projectSlug)))
+
   const sort = computed<TaskSort>({
     get: () => filters.value.sort,
     set: (value) => {
@@ -98,11 +110,21 @@ export function useTaskListPage(options: { projectSlug?: string | null } = {}) {
 
   async function refreshAll() {
     const key = openKey.value
-    await Promise.all([list.refresh(), key ? refreshNuxtData(taskDataKey(key)) : Promise.resolve()])
+    await Promise.all([
+      list.refresh(),
+      key ? refreshNuxtData(taskDataKey(key)) : Promise.resolve(),
+      // Project header (counts, notes, links) on project pages.
+      projectSlug ? refreshNuxtData(projectDataKey(projectSlug)) : Promise.resolve(),
+    ])
   }
 
   useAutoRefresh({ project: projectSlug, refresh: refreshAll, paused: () => ui.busy })
-  useShortcuts({ onNew: ui.requestQuickAdd, onSearch: ui.requestSearchFocus })
+  useShortcuts({
+    onNew: () => {
+      if (canCreate.value) ui.requestQuickAdd()
+    },
+    onSearch: ui.requestSearchFocus,
+  })
 
   function onTaskUpdated(task: TaskSummaryDto | TaskDetailDto) {
     list.upsertTask(task)
@@ -126,6 +148,7 @@ export function useTaskListPage(options: { projectSlug?: string | null } = {}) {
     openKey,
     openTask,
     canEditTask,
+    canCreate,
     refreshAll,
     onTaskUpdated,
     onTaskDeleted,

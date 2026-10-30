@@ -14,7 +14,12 @@ export interface ServiceContext {
   siteUrl: string
   /** Injectable clock for tests. */
   now?: () => Date
+  /** IANA time zone used for calendar dates such as "today" (`NUXT_TIMEZONE`, default `DEFAULT_TIME_ZONE`). */
+  timeZone?: string
 }
+
+/** The owner's calendar (the UI uses the browser's local date; server defaults must match it). */
+export const DEFAULT_TIME_ZONE = 'Europe/Madrid'
 
 export type ServiceErrorCode = 'unauthorized' | 'forbidden' | 'not_found' | 'conflict' | 'invalid'
 
@@ -46,6 +51,21 @@ export class ServiceError extends Error {
 
 export function isServiceError(error: unknown): error is ServiceError {
   return error instanceof ServiceError
+}
+
+/**
+ * Stable machine-readable reason carried as `details: { reason }` by user-facing errors (the UI translates it;
+ * messages stay English). Null for other details (validation issues, conflict state...).
+ */
+export function errorReason(details: unknown): string | null {
+  if (typeof details !== 'object' || details === null || Array.isArray(details)) return null
+  const reason = (details as { reason?: unknown }).reason
+  return typeof reason === 'string' && reason !== '' ? reason : null
+}
+
+/** Shorthand for `{ reason }` details. */
+export function because(reason: string): { reason: string } {
+  return { reason }
 }
 
 export function nowOf(ctx: ServiceContext): Date {

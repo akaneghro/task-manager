@@ -70,9 +70,16 @@ i18n/locales/{es,en}/   app.json (shell, projects, settings, auth, public) and t
   Updates carry `expectedVersion`; a mismatch throws `ServiceError('conflict', ..., current TaskDetailDto)` -> HTTP 409.
 - Soft delete (`deleted_at`) for tasks, projects, accounts, comments. Deleted rows are invisible everywhere.
 - Inbox project (`slug: inbox`, `key: INBOX`, `is_inbox`) always exists, cannot be deleted/archived/renamed slug.
+  Reserved project slugs: `inbox` and `all` (`all` = every project in listings and `/api/sync`).
 - `done`/`cancelled` are closed statuses: set `completed_at` when entering `done`, clear it when leaving.
-- "blocked by" dependencies are `task_links` rows with `type = 'blocks'` (`from` blocks `to`); cycles are rejected.
-- Sources: `created_by` / `updated_by` / `author_source` = `user:<userId>` or `mcp:<tokenName>`.
+- "blocked by" dependencies are `task_links` rows with `type = 'blocks'` (`from` blocks `to`); cycles are rejected
+  (checked inside an IMMEDIATE transaction, ignoring links whose ends are soft-deleted).
+- Sources: `created_by` / `updated_by` / `author_source` = `user:<userId>` or `mcp:<tokenName>`. Public share links
+  only ever see them reduced to `user:` / `mcp:` (no ids, token names or member logins).
+- A `member` assignee must be an accepted, active member of the task's project.
+- Server-side calendar dates ("today") use `NUXT_TIMEZONE` (default `Europe/Madrid`), like the UI's local dates.
+- User-facing ServiceErrors carry `details: { reason }` (`because('...')`); the UI translates the reason
+  (`errors.reasons.*`), the English message is for logs and MCP.
 
 ### Permissions (shared/utils/permissions.ts)
 
@@ -81,19 +88,23 @@ i18n/locales/{es,en}/   app.json (shell, projects, settings, auth, public) and t
 | See projects / tasks | all | invited projects | invited projects | that project (tasks only) | all |
 | Notes, links, client | yes | yes | yes | no | yes |
 | Create/edit tasks, checklist, deps | yes | no | no | no | yes |
-| Create project / edit notes & links | yes | no | no | no | yes |
+| Create project / edit notes & links | yes | no | no | no | yes (append notes, add links) |
 | Edit project fields, delete/archive | yes | no | no | no | no |
 | Comments read / write | yes | yes / yes (own edit) | yes / no | no | yes / yes |
 | Vault | yes (reveal logged) | no | no | no | only `share_with_claude` secrets and only with an `allow_secrets` token (logged) |
 | Members, share links, tokens | yes | no | no | no | no |
 
-Login gate: the owner is `NUXT_OWNER_GITHUB_LOGIN` (then pinned by `github_id`); anyone else needs an active
-`project_members` invitation for their GitHub login.
+Login gate: the owner is `NUXT_OWNER_GITHUB_LOGIN` (then pinned by `github_id`; a dev-login owner row with the
+placeholder `github_id` 0 is adopted by the first matching GitHub login); anyone else needs an active
+`project_members` invitation. Invitations are never pre-linked to a user: an unlinked invitation matches the live
+GitHub login once and is then bound to that user id (a later account reusing the login gets nothing).
 
 ## REST API contract (`server/api/**`)
 
 All responses are DTOs from `shared/types/dto.ts`. Errors: `{ statusCode, data: { code, message, details } }`.
-Cookie-authenticated non-GET requests must pass the Origin check (`server/middleware/csrf.ts`).
+Cookie-authenticated non-GET requests must pass the Origin check (`server/middleware/csrf.ts`, no exemptions).
+Every response gets security headers (`server/middleware/security-headers.ts`); `/mcp`, `/api/connect/check`,
+`/api/public/**` and `/auth/**` are rate limited per IP (`server/middleware/rate-limit.ts`, 429).
 
 | Method & path | Body / query | Returns |
 |---|---|---|
@@ -111,7 +122,7 @@ Cookie-authenticated non-GET requests must pass the Origin check (`server/middle
 | `GET/POST /api/projects/:slug/accounts` | `createAccountSchema` | `AccountDto[]` / `AccountDto` |
 | `PATCH/DELETE /api/accounts/:id` | `updateAccountSchema` | `AccountDto` / `{ ok: true }` |
 | `POST /api/accounts/:id/reveal` | | `{ secret: string }` (logged) |
-| `GET /api/tasks` | `listTasksQuerySchema` (`project` slug or omitted = all visible) | `TaskListDto` |
+| `GET /api/tasks` | `listTasksQuerySchema` (`project` slug or omitted = all visible; `closedLast` sorts done/cancelled last) | `TaskListDto` |
 | `POST /api/tasks` | `createTaskSchema` (`project` slug, default Inbox) | `TaskDetailDto` |
 | `GET /api/tasks/:ref` | ref = key (`ABC-12`) or id | `TaskDetailDto` |
 | `PATCH /api/tasks/:ref` | `updateTaskSchema` | `TaskDetailDto` (409 `ConflictDto<TaskDetailDto>`) |
@@ -136,12 +147,17 @@ Auth routes: `GET /auth/github` (OAuth), `POST /api/auth/logout` is replaced by 
 
 ## MCP server
 
-- Endpoint `POST /mcp` (Streamable HTTP, stateless, JSON responses). Auth: `Authorization: Bearer tm_...`.
-- Default project from header `X-TM-Project: <slug>` (fallback `?project=`).
+- Endpoint `POST /mcp` (Streamable HTTP, stateless). Modern-protocol clients get JSON bodies; legacy 2025-era
+  clients (Claude Code) get single SSE-framed responses (`Accept: application/json, text/event-stream`).
+  Auth: `Authorization: Bearer tm_...` (401 carries `error="invalid_token"`; `/.well-known/*` answers a JSON 404).
+- Default project from header `X-TM-Project: <slug>` (fallback `?project=`); an invalid slug is a 400. Tools also
+  accept a project key where a slug is expected.
 - Tools: `get_context`, `list_projects`, `get_project`, `list_tasks`, `get_task`, `search_tasks`, `create_task`,
   `update_task`, `set_status`, `add_checklist_items`, `toggle_checklist_item`, `add_comment`, `link_tasks`,
-  `create_project`, `update_project_notes`, `list_shared_secrets`, `get_shared_secret`. Prompts: `next-task`, `wrap-up`.
-- Tools are thin wrappers over services; no destructive tools.
+  `unlink_tasks`, `create_project`, `update_project_notes`, `update_project_links`, `list_shared_secrets`,
+  `get_shared_secret`. Prompts: `next-task`, `wrap-up`. Reference: `docs/mcp.md` (keep it in sync with the schemas).
+- Tools are thin wrappers over services. Nothing deletes tasks, projects, comments or vault entries; `unlink_tasks`
+  (dependency links) is the only removal and is annotated `destructiveHint: true`.
 
 ## Security Rules
 

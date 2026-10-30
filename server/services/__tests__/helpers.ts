@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { migrate } from 'drizzle-orm/libsql/migrator'
 import { createDb } from '../../db'
 import type { Db } from '../../db'
-import { users } from '../../db/schema'
+import { projectMembers, users } from '../../db/schema'
 import type { Actor } from '../../../shared/utils/permissions'
 import type { MemberRole } from '../../../shared/utils/enums'
 import type { ServiceContext } from '../context'
@@ -50,6 +50,11 @@ export async function createMemberUser(db: Db, login: string, githubId: number):
   const [user] = await db.insert(users).values({ githubId, githubLogin: login, role: 'member' }).returning()
   if (!user) throw new Error('failed to seed member')
   return user.id
+}
+
+/** An accepted (linked) invitation of `userId` on a project. */
+export async function addProjectMember(db: Db, projectId: string, userId: string, login: string, role: MemberRole = 'viewer'): Promise<void> {
+  await db.insert(projectMembers).values({ projectId, userId, githubLogin: login, role, acceptedAt: new Date() })
 }
 
 export function ownerActor(userId: string): Actor {

@@ -183,6 +183,9 @@ async function run(options: ConnectOptions): Promise<void> {
     '  3. Run /mcp to confirm it is connected',
     '  4. Try: "usa get_context" (or "use get_context")',
     '',
+    'Troubleshooting: if /mcp shows the server as "needs authentication" (and Authenticate fails), the API token',
+    'was revoked, expired or mistyped: create a new one in Settings > API tokens and rerun this command.',
+    '',
     'Alternative without .mcp.json (stored in your local Claude Code config):',
     `  ${claudeMcpAddCommand(options.name, baseUrl, projectSlug)}`,
   ].join('\n'))

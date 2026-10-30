@@ -76,6 +76,7 @@ describe('useTaskFilters helpers', () => {
     expect(taskFiltersToApiQuery(filters, { forceIncludeClosed: true, limit: 500 })).toEqual({
       project: 'other', q: 'x', sort: 'priority', includeClosed: 'true', limit: '500',
     })
+    expect(taskFiltersToApiQuery(filters, { forceIncludeClosed: true, closedLast: true })).toMatchObject({ includeClosed: 'true', closedLast: 'true' })
     expect(taskFiltersToApiQuery({ ...emptyTaskFilters(), status: ['done'] })).toMatchObject({ status: 'done', includeClosed: 'true' })
   })
 

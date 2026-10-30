@@ -35,6 +35,8 @@
     >
       <aside
         v-if="drawerOpen"
+        ref="mobileNav"
+        tabindex="-1"
         class="fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] border-r border-gray-200 bg-gray-50 shadow-xl lg:hidden dark:border-gray-800 dark:bg-gray-950"
         role="dialog"
         aria-modal="true"
@@ -77,9 +79,21 @@
 </template>
 
 <script setup lang="ts">
+import { useUiStore } from '~/stores/ui'
+
 const route = useRoute()
+const ui = useUiStore()
 const drawerOpen = ref(false)
 const pageTitle = usePageTitle()
+
+// Mobile nav is a modal dialog: keep Tab inside it, focus it on open and give focus back to the toggle on close.
+const mobileNav = useTemplateRef<HTMLElement>('mobileNav')
+useFocusTrap(mobileNav, drawerOpen, { initialFocus: true, restoreFocus: true })
+
+// Keep the sidebar / pickers (projects store) in sync with changes made elsewhere (e.g. Claude creating a
+// project or closing tasks): one global poller refreshes the store whenever /api/sync reports a change.
+const { refresh: refreshProjects } = useProjects()
+useAutoRefresh({ project: null, refresh: refreshProjects, paused: () => ui.busy })
 
 watch(() => route.fullPath, () => {
   drawerOpen.value = false

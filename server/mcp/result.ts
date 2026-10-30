@@ -2,7 +2,7 @@
 
 import type { CallToolResult } from '@modelcontextprotocol/server'
 import { z } from 'zod'
-import { isServiceError } from '../services/context'
+import { errorReason, isServiceError } from '../services/context'
 import type { ConflictDto } from '../../shared/types/dto'
 import { compactProjectDetail, compactTaskDetail, isProjectDetail, isTaskDetail } from './tools/format'
 
@@ -52,7 +52,7 @@ function formatIssues(issues: readonly z.core.$ZodIssue[]): string {
 /** Converts any thrown value into an `isError` tool result. Never includes stack traces or secrets. */
 export function errorResult(error: unknown): CallToolResult {
   if (isServiceError(error)) {
-    if (error.code === 'conflict' && error.details !== undefined) {
+    if (error.code === 'conflict' && error.details !== undefined && !errorReason(error.details)) {
       const conflict: ConflictDto<unknown> = {
         error: 'version_conflict',
         message: error.message,
@@ -69,7 +69,8 @@ export function errorResult(error: unknown): CallToolResult {
         structuredContent: toPlainObject(conflict),
       }
     }
-    return errorText(`${labelOf(error.code)}: ${error.message}`)
+    const hint = recoveryHint(error.code, error.message)
+    return errorText(`${labelOf(error.code)}: ${error.message}${hint ? `. ${hint}` : ''}`)
   }
   if (error instanceof z.ZodError) {
     return errorText(`Invalid input: ${formatIssues(error.issues)}`)
@@ -82,6 +83,21 @@ function versionOf(value: unknown): number | undefined {
   if (typeof value !== 'object' || value === null) return undefined
   const version = (value as { version?: unknown }).version
   return typeof version === 'number' ? version : undefined
+}
+
+/** What Claude can do next for the common dead ends (REST keeps the plain service messages). */
+export function recoveryHint(code: string, message: string): string | null {
+  if (code === 'not_found' && message.startsWith('Task ')) {
+    return 'Check the key with search_tasks (or list_tasks with project "all"); keys look like ABC-12'
+  }
+  if (code === 'forbidden' && message.includes('secret.readShared')) {
+    return 'This API token was created without "Allow secrets". Ask the user to create a token with it in Settings > '
+      + 'API tokens and rerun pnpm connect, or to give you the value another way'
+  }
+  if (code === 'forbidden') {
+    return 'MCP tokens cannot do this (no deletes, no project settings, members, share links or tokens); ask the user to do it in the web app'
+  }
+  return null
 }
 
 function labelOf(code: string): string {

@@ -8,7 +8,7 @@ import { createTokenSchema } from '../../shared/schemas/token'
 import type { CreateTokenInput } from '../../shared/schemas/token'
 import type { CreatedTokenDto, TokenDto } from '../../shared/types/dto'
 import { API_TOKEN_PREFIX, apiTokenPrefix, generateApiToken, sha256Hex } from '../utils/crypto'
-import { ServiceError, assertCan, nowOf } from './context'
+import { assertCan, because, nowOf, ServiceError } from './context'
 import type { ServiceContext } from './context'
 import { isUniqueViolation, isoOrNull, parseInput } from './projects'
 
@@ -56,7 +56,7 @@ export async function createToken(ctx: ServiceContext, input: CreateTokenInput):
   const [active] = await ctx.db.select({ id: apiTokens.id }).from(apiTokens)
     .where(and(eq(apiTokens.userId, userId), isNull(apiTokens.revokedAt), sql`lower(${apiTokens.name}) = ${name.toLowerCase()}`))
     .limit(1)
-  if (active) throw new ServiceError('conflict', `A token named "${name}" already exists`)
+  if (active) throw new ServiceError('conflict', `A token named "${name}" already exists`, because('token_name_taken'))
 
   // Revoked rows normally get renamed on revocation; rename any legacy one so the unique (user, name) index
   // never blocks a new token.
@@ -81,7 +81,7 @@ export async function createToken(ctx: ServiceContext, input: CreateTokenInput):
     }).returning()
   }
   catch (error) {
-    if (isUniqueViolation(error)) throw new ServiceError('conflict', `A token named "${name}" already exists`)
+    if (isUniqueViolation(error)) throw new ServiceError('conflict', `A token named "${name}" already exists`, because('token_name_taken'))
     throw error
   }
   if (!row) throw new Error('failed to create token')

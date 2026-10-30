@@ -41,3 +41,13 @@ export type MemberRole = (typeof MEMBER_ROLES)[number]
 
 /** Special project that always exists and cannot be deleted or archived. */
 export const INBOX_PROJECT = { slug: 'inbox', key: 'INBOX', name: 'Inbox' } as const
+
+/** Project-scope sentinel meaning "every visible project" (list_tasks, /api/tasks, /api/sync). */
+export const ALL_PROJECTS = 'all'
+
+/** Slugs no project may take: the Inbox's own slug and the "every project" sentinel. */
+export const RESERVED_PROJECT_SLUGS: readonly string[] = [INBOX_PROJECT.slug, ALL_PROJECTS]
+
+export function isReservedProjectSlug(slug: string): boolean {
+  return RESERVED_PROJECT_SLUGS.includes(slug.trim().toLowerCase())
+}

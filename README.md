@@ -103,21 +103,23 @@ Manual `.mcp.json`:
 
 | Tool | What it does |
 |---|---|
-| `get_context` | Snapshot of the current project: counts, in progress, next up, blocked, in review |
+| `get_context` | Snapshot of the current project: links, notes (what earlier sessions learned), counts, in progress, next up, blocked, in review |
 | `list_projects` | List projects (filter by status) |
-| `get_project` | Project detail: description, notes, links, client |
-| `list_tasks` | List tasks with filters (status, priority, type, executor, assignee, due date, text) or across all projects |
-| `get_task` | Task detail with checklist, dependencies, comments and version |
-| `search_tasks` | Free-text search by title, description or key |
-| `create_task` | Create a task (with checklist and `blockedBy` dependencies) |
+| `get_project` | Project detail: description, full notes, links, client |
+| `list_tasks` | List tasks with filters (status, priority, type, executor, assignee kind, due date, text `q`) or across all projects (`"all"`) |
+| `get_task` | Task detail with checklist, dependencies, the latest 20 comments (or all) and version |
+| `search_tasks` | Free-text search by title, description or key, most recently updated first |
+| `create_task` | Create a task (with checklist, third-party blocker and `blockedBy` dependencies) |
 | `update_task` | Update task fields with `expectedVersion` (conflict-safe) |
-| `set_status` | Change status, optionally with a note (stored as a comment) or a third-party blocker |
+| `set_status` | Change status, optionally with a note (stored as a comment) or a third-party blocker (`null` clears it) |
 | `add_checklist_items` | Append checklist items |
 | `toggle_checklist_item` | Tick / untick a checklist item (idempotent) |
 | `add_comment` | Add a markdown comment (progress summaries) |
-| `link_tasks` | Add or remove a "blocked by" dependency (cycles are rejected) |
-| `create_project` | Create a project |
+| `link_tasks` | Add "blocked by" dependencies (cycles are rejected) |
+| `unlink_tasks` | Remove "blocked by" dependencies (the only removal tool) |
+| `create_project` | Create a project (optionally with notes and links) |
 | `update_project_notes` | Append to or replace the project notes |
+| `update_project_links` | Add or update project links (never removes) |
 | `list_shared_secrets` | List vault entries shared with Claude (requires an `allowSecrets` token) |
 | `get_shared_secret` | Read one shared secret, with a reason (access is logged) |
 

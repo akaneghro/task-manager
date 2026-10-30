@@ -18,6 +18,8 @@ import type { ProjectContextDto } from '../../services/tasks'
 /** Comments shown by `get_task` (most recent last). */
 export const TASK_COMMENTS_SHOWN = 20
 const DESCRIPTION_PREVIEW = 160
+/** Project notes included in `get_context` (the start of the notes; get_project returns them all). */
+export const CONTEXT_NOTES_PREVIEW = 3000
 
 export type CompactAssignee = string | { member: string | null } | { external: string | null }
 
@@ -103,6 +105,7 @@ export function compactTaskDetail(task: TaskDetailDto) {
     hiddenDependencies: task.hiddenDependencies > 0 ? task.hiddenDependencies : undefined,
     comments: comments.length > 0 ? comments.map(compactComment) : undefined,
     olderComments: task.commentCount > comments.length ? task.commentCount - comments.length : undefined,
+    olderCommentsHint: task.commentCount > comments.length ? 'get_task with comments "all" returns them' : undefined,
     createdAt: task.createdAt,
     createdBy: task.createdBy,
     updatedAt: task.updatedAt,
@@ -161,6 +164,11 @@ export function compactProjectContext(context: ProjectContextDto) {
       description: p.description || undefined,
       counts: compactCounts(p.counts),
       openTasks: p.openCount,
+      links: p.links.length > 0 ? p.links.map(l => ({ kind: l.kind, label: l.label, url: l.url })) : undefined,
+      // Durable knowledge recorded by earlier sessions (update_project_notes): read it before working.
+      notes: p.notes ? p.notes.slice(0, CONTEXT_NOTES_PREVIEW) : undefined,
+      notesTruncated: p.notes.length > CONTEXT_NOTES_PREVIEW ? true : undefined,
+      notesLength: p.notes.length > CONTEXT_NOTES_PREVIEW ? p.notes.length : undefined,
     },
     inProgress: context.inProgress.map(compactTaskRow),
     nextUp: context.nextUp.map(compactTaskRow),

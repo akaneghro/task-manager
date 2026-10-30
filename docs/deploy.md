@@ -68,9 +68,18 @@ production with `pnpm gen:keys` — do not reuse your local ones.
 | `NUXT_DATABASE_AUTH_TOKEN` | yes | Turso database token |
 | `NUXT_PUBLIC_SITE_URL` | yes | `https://<your-domain>` (no trailing slash). Used to build public share links. |
 | `NUXT_OAUTH_GITHUB_REDIRECT_URL` | no | Only if the callback must differ from `<site>/auth/github` |
+| `NUXT_TIMEZONE` | no | IANA time zone for server-side "today" defaults (e.g. a blocker's `since` set by Claude). Default `Europe/Madrid`. |
 
-Never set `NUXT_DEV_LOGIN` in production (it only works in dev builds anyway). The local `file:` database does
-not work on serverless platforms: `NUXT_DATABASE_URL` must point at Turso.
+Never set `NUXT_DEV_LOGIN` in production (it only works in dev builds anyway). If the dev login was ever used
+against a database before your first GitHub login, it created the owner row with the placeholder GitHub id `0`;
+the first GitHub login of `NUXT_OWNER_GITHUB_LOGIN` (and `NUXT_OWNER_GITHUB_ID`, when set) adopts that row and
+pins your real id, so you are not locked out. The local `file:` database does not work on serverless platforms:
+`NUXT_DATABASE_URL` must point at Turso.
+
+Security headers (`X-Frame-Options: DENY`, `frame-ancestors 'none'`, `nosniff`, `Referrer-Policy`, HSTS on HTTPS)
+are set by the app itself. The per-IP rate limit of `/mcp`, `/api/connect/check`, `/api/public/**` and `/auth/**`
+is in memory, so on serverless hosts each instance counts separately: add the platform's edge rate limiting / WAF
+rules if you need a hard limit.
 
 ## 5a. Netlify
 

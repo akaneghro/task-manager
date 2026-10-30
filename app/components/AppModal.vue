@@ -69,6 +69,9 @@ const titleId = useId()
 const panel = useTemplateRef<HTMLElement>('panel')
 let previousFocus: HTMLElement | null = null
 
+// aria-modal: Tab must not reach the page behind the overlay.
+useFocusTrap(panel, open)
+
 const widthClass = computed(() => ({ sm: 'sm:max-w-sm', md: 'sm:max-w-lg', lg: 'sm:max-w-2xl' })[props.size])
 
 function close() {

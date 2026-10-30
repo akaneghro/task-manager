@@ -93,6 +93,8 @@ export const listTasksQuerySchema = z.object({
   dueBefore: dateOnlySchema.optional(),
   q: z.string().trim().max(200).optional(),
   includeClosed: queryBoolean.default(false),
+  /** Sort open tasks before done/cancelled ones (the board: a limit then only ever truncates closed cards). */
+  closedLast: queryBoolean.default(false),
   sort: z.enum(TASK_SORTS).default('priority'),
   limit: z.coerce.number().int().min(1).max(500).default(200),
   offset: z.coerce.number().int().min(0).default(0),

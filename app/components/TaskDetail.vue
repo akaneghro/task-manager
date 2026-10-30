@@ -239,20 +239,31 @@
             <select
               :id="`${id}-assignee`"
               class="input py-1"
-              :value="assigneeKindDraft"
-              @change="onAssigneeKindChange"
+              :value="assigneeValue"
+              @change="onAssigneeChange"
             >
               <option
                 v-for="kind in assigneeKinds"
                 :key="kind"
                 :value="kind"
-                :disabled="kind === 'member'"
               >
-                {{ kind === 'member' && task.assignee.name ? task.assignee.name : $t(taskAssigneeLabelKey(kind)) }}
+                {{ $t(taskAssigneeLabelKey(kind)) }}
               </option>
+              <optgroup
+                v-if="memberOptions.length > 0"
+                :label="$t('tasks.assignee.members')"
+              >
+                <option
+                  v-for="member in memberOptions"
+                  :key="member.userId"
+                  :value="`member:${member.userId}`"
+                >
+                  {{ member.login }}
+                </option>
+              </optgroup>
             </select>
             <form
-              v-if="assigneeKindDraft === 'external'"
+              v-if="assigneeValue === 'external'"
               @submit.prevent="saveExternalAssignee"
             >
               <label
@@ -321,15 +332,17 @@
       <div class="min-w-0 space-y-6 @3xl:order-1">
         <BlockerEditor
           v-if="showBlocker"
+          ref="blockerEditor"
           :blocker="task.blocker"
           :readonly="!canEdit"
           @save="patch({ blocker: $event })"
+          @cancel="onBlockerCancel"
         />
         <button
           v-else-if="canEdit"
           type="button"
           class="btn-ghost -ml-2 px-2 py-1 text-xs"
-          @click="forceBlocker = true"
+          @click="addBlocker"
         >
           <Icon
             name="hourglass"
@@ -456,7 +469,7 @@ import {
   TASK_TYPES,
 } from '#shared/utils/enums'
 import type { AssigneeKind } from '#shared/utils/enums'
-import type { ChecklistItemDto, CommentDto, TaskDetailDto } from '#shared/types/dto'
+import type { ChecklistItemDto, CommentDto, MemberDto, TaskDetailDto } from '#shared/types/dto'
 import type { TaskPatch } from '#shared/schemas/task'
 import {
   isTaskOverdue,
@@ -489,6 +502,9 @@ const id = useId()
 
 const local = ref<TaskDetailDto | null>(props.task)
 watch(() => props.task, (value) => {
+  // While scalar edits of this task are being saved, `patchTask` owns `local` (last saved state + queued edits):
+  // the parent echoing an intermediate save must not wipe the edits still in flight.
+  if (local.value?.id === value.id && mutations.isPatching(value.id)) return
   local.value = value
 })
 const task = computed<TaskDetailDto>(() => local.value ?? props.task)
@@ -554,23 +570,68 @@ function saveTitle() {
   if (title && title !== task.value.title) void patch({ title })
 }
 
-// Assignee
-const assigneeKinds = computed<AssigneeKind[]>(() =>
-  ASSIGNEE_KINDS.filter(kind => kind !== 'member' || task.value.assignee.kind === 'member'))
-const assigneeKindDraft = ref<AssigneeKind>(props.task.assignee.kind)
+// Assignee: none / owner / claude / external, plus the project's accepted members (the owner can list them).
+const assigneeKinds = ASSIGNEE_KINDS.filter((kind): kind is Exclude<AssigneeKind, 'member'> => kind !== 'member')
+
+function assigneeValueOf(assignee: TaskDetailDto['assignee']): string {
+  return assignee.kind === 'member' ? `member:${assignee.userId ?? ''}` : assignee.kind
+}
+
+const assigneeValue = ref<string>(assigneeValueOf(props.task.assignee))
 const externalName = ref(props.task.assignee.kind === 'external' ? (props.task.assignee.name ?? '') : '')
 const externalInput = useTemplateRef<HTMLInputElement>('externalInput')
 
 watch(() => task.value.assignee, (assignee) => {
-  assigneeKindDraft.value = assignee.kind
+  assigneeValue.value = assigneeValueOf(assignee)
   externalName.value = assignee.kind === 'external' ? (assignee.name ?? '') : ''
 })
 
-async function onAssigneeKindChange(event: Event) {
+interface MemberOption {
+  userId: string
+  login: string
+}
+
+const projectMembers = ref<MemberOption[]>([])
+const canListMembers = computed(() => canEdit.value && (task.value.capabilities?.manage ?? false))
+
+watch([() => task.value.projectSlug, canListMembers], async ([slug, allowed]) => {
+  projectMembers.value = []
+  if (!allowed || !import.meta.client) return
+  try {
+    const members = await apiFetch<MemberDto[]>(`/api/projects/${encodeURIComponent(slug)}/members`)
+    if (slug !== task.value.projectSlug) return
+    projectMembers.value = members
+      .filter((m): m is MemberDto & { userId: string } => m.userId !== null && m.acceptedAt !== null)
+      .map(m => ({ userId: m.userId, login: m.githubLogin }))
+  }
+  catch {
+    // The picker just offers no members.
+  }
+}, { immediate: true })
+
+/** Accepted members, plus the current member assignee when the list does not include it (e.g. revoked since). */
+const memberOptions = computed<MemberOption[]>(() => {
+  const list = [...projectMembers.value]
+  const current = task.value.assignee
+  if (current.kind === 'member' && current.userId && !list.some(m => m.userId === current.userId)) {
+    list.push({ userId: current.userId, login: current.name ?? t('tasks.assignee.member') })
+  }
+  return list
+})
+
+async function onAssigneeChange(event: Event) {
   const raw = (event.target as HTMLSelectElement).value
-  const kind = ASSIGNEE_KINDS.find(k => k === raw)
-  if (!kind || kind === 'member') return
-  assigneeKindDraft.value = kind
+  assigneeValue.value = raw
+  if (raw.startsWith('member:')) {
+    const userId = raw.slice('member:'.length)
+    const current = task.value.assignee
+    if (userId && !(current.kind === 'member' && current.userId === userId)) {
+      void patch({ assignee: { kind: 'member', userId } })
+    }
+    return
+  }
+  const kind = assigneeKinds.find(k => k === raw)
+  if (!kind) return
   if (kind === 'external') {
     await nextTick()
     externalInput.value?.focus()
@@ -589,6 +650,19 @@ function saveExternalAssignee() {
 
 // Blocker
 const forceBlocker = ref(false)
+const blockerEditor = useTemplateRef<{ startEdit: () => void }>('blockerEditor')
+
+/** "Add blocker": show the editor and open its form right away (one click, focus moves into it). */
+async function addBlocker() {
+  forceBlocker.value = true
+  await nextTick()
+  blockerEditor.value?.startEdit()
+}
+
+/** Cancelling a blocker that was never saved hides the empty box again. */
+function onBlockerCancel() {
+  if (task.value.blocker === null && task.value.status !== 'blocked') forceBlocker.value = false
+}
 const showBlocker = computed(() => task.value.status === 'blocked' || task.value.blocker !== null || forceBlocker.value)
 // Description
 const editingDescription = ref(false)
@@ -638,7 +712,8 @@ const sessionUser = computed(() => (props.readonly ? null : toSessionUser(sessio
 
 function sourceLabel(source: string): string {
   const parsed = parseTaskSource(source)
-  if (parsed.kind === 'mcp') return t('tasks.meta.claude', { name: parsed.name })
+  // Public links get anonymised sources (`mcp:` / `user:` without a name).
+  if (parsed.kind === 'mcp') return parsed.name ? t('tasks.meta.claude', { name: parsed.name }) : t('tasks.meta.claudeOnly')
   if (parsed.kind === 'user') {
     if (sessionUser.value?.id && sessionUser.value.id === parsed.name) return t('tasks.meta.you')
     const fromComment = task.value.comments.find(c => c.authorSource === source && c.author.login)

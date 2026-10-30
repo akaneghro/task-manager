@@ -2,7 +2,7 @@
 
 import { and, asc, desc, eq, inArray, isNull, ne, notInArray, or, sql } from 'drizzle-orm'
 import type { SQL, SQLWrapper } from 'drizzle-orm'
-import { projects, taskChecklistItems, taskLinks, tasks, users } from '../db/schema'
+import { projectMembers, projects, taskChecklistItems, taskLinks, tasks, users } from '../db/schema'
 import type { TaskRow } from '../db/schema'
 import {
   createTaskSchema,
@@ -21,13 +21,14 @@ import type {
   TaskSort,
   UpdateTaskInput,
 } from '../../shared/schemas/task'
-import { CLOSED_TASK_STATUSES, INBOX_PROJECT, PRIORITY_RANK, TASK_STATUSES } from '../../shared/utils/enums'
+import { ALL_PROJECTS, CLOSED_TASK_STATUSES, INBOX_PROJECT, PRIORITY_RANK, TASK_STATUSES } from '../../shared/utils/enums'
 import type { ProjectStatus, TaskStatus } from '../../shared/utils/enums'
 import { parseTaskKey } from '../../shared/utils/taskKey'
 import { needsRebalance, positionBetween, rebalancedPositions } from '../../shared/utils/position'
 import { wouldCreateCycle } from '../../shared/utils/dependencies'
-import type { TaskCountsByStatus, TaskDetailDto, TaskListDto, TaskSummaryDto } from '../../shared/types/dto'
-import { ServiceError, actorSource, assertCan, nowOf } from './context'
+import type { ProjectLinkDto, TaskCountsByStatus, TaskDetailDto, TaskListDto, TaskSummaryDto } from '../../shared/types/dto'
+import { can } from '../../shared/utils/permissions'
+import { actorSource, assertCan, because, nowOf, ServiceError } from './context'
 import type { ServiceContext } from './context'
 import { countTasksByStatus, emptyCounts, getVisibleProjectBySlug, openCountOf, visibleProjectIds } from './lookup'
 import {
@@ -44,6 +45,8 @@ import {
 } from './taskMappers'
 import type { TaskWithProject } from './taskMappers'
 import { addComment } from './comments'
+import { IMMEDIATE, loadLiveBlockEdges, withBusyRetry } from './tx'
+import { getProject } from './projects'
 
 type TaskChanges = Partial<typeof tasks.$inferInsert>
 
@@ -69,6 +72,8 @@ const STATUS_ORDER = sql`case ${tasks.status} ${sql.raw(
 )} else 99 end`
 
 const DUE_NULLS_LAST = sql`(${tasks.dueDate} is null)`
+
+const CLOSED_LAST = sql`(${tasks.status} in (${sql.join(CLOSED_TASK_STATUSES.map(s => sql`${s}`), sql`, `)}))`
 
 function orderByFor(sort: TaskSort): SQL[] {
   switch (sort) {
@@ -102,7 +107,7 @@ function likeEscaped(column: SQLWrapper, pattern: string): SQL {
 export async function listTasks(ctx: ServiceContext, query: ListTasksQuery): Promise<TaskListDto> {
   const q = parseServiceInput(listTasksQuerySchema, query)
   let projectIds: string[]
-  if (q.project && q.project.toLowerCase() !== 'all') {
+  if (q.project && q.project.toLowerCase() !== ALL_PROJECTS) {
     const project = await getVisibleProjectBySlug(ctx, q.project)
     assertCan(ctx, 'task.read', { projectId: project.id })
     projectIds = [project.id]
@@ -148,7 +153,7 @@ export async function listTasks(ctx: ServiceContext, query: ListTasksQuery): Pro
     .from(tasks)
     .innerJoin(projects, eq(projects.id, tasks.projectId))
     .where(where)
-    .orderBy(...orderByFor(q.sort))
+    .orderBy(...(q.closedLast ? [CLOSED_LAST] : []), ...orderByFor(q.sort))
     .limit(q.limit)
     .offset(q.offset)
 
@@ -202,12 +207,44 @@ async function conflictError(ctx: ServiceContext, taskId: string): Promise<Servi
 // ---------------------------------------------------------------------------------------------------------------
 // Field mapping
 
-async function assigneeColumns(ctx: ServiceContext, assignee: AssigneeInput): Promise<TaskChanges> {
+/** Whether `userId` is an accepted, active member (invitation linked and not revoked) of the project. */
+async function isActiveProjectMember(ctx: ServiceContext, projectId: string, userId: string): Promise<boolean> {
+  const [row] = await ctx.db.select({ id: projectMembers.id })
+    .from(projectMembers)
+    .innerJoin(users, eq(users.id, projectMembers.userId))
+    .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, userId), isNull(projectMembers.revokedAt)))
+    .limit(1)
+  return row !== undefined
+}
+
+/**
+ * User id of the accepted member of a project with this GitHub login (current login, or the login the invitation
+ * was made for). Used by MCP, which names members by login. Throws `invalid` when there is none.
+ */
+export async function memberUserIdByLogin(ctx: ServiceContext, projectId: string, login: string): Promise<string> {
+  const lower = login.trim().replace(/^@/, '').toLowerCase()
+  const [row] = await ctx.db.select({ userId: users.id })
+    .from(projectMembers)
+    .innerJoin(users, eq(users.id, projectMembers.userId))
+    .where(and(
+      eq(projectMembers.projectId, projectId),
+      isNull(projectMembers.revokedAt),
+      or(sql`lower(${users.githubLogin}) = ${lower}`, sql`lower(${projectMembers.githubLogin}) = ${lower}`),
+    ))
+    .limit(1)
+  if (!row) {
+    throw new ServiceError('invalid', `"${login}" is not an accepted member of this project; members are the GitHub users the owner invited who already signed in`, because('not_a_member'))
+  }
+  return row.userId
+}
+
+async function assigneeColumns(ctx: ServiceContext, assignee: AssigneeInput, projectId: string): Promise<TaskChanges> {
   switch (assignee.kind) {
     case 'member': {
-      const [user] = await ctx.db.select({ id: users.id }).from(users).where(eq(users.id, assignee.userId)).limit(1)
-      if (!user) throw new ServiceError('invalid', 'Assignee user not found')
-      return { assigneeKind: 'member', assigneeUserId: user.id, assigneeExternal: null }
+      if (!await isActiveProjectMember(ctx, projectId, assignee.userId)) {
+        throw new ServiceError('invalid', 'The assignee is not an accepted member of this project', because('not_a_member'))
+      }
+      return { assigneeKind: 'member', assigneeUserId: assignee.userId, assigneeExternal: null }
     }
     case 'external':
       return { assigneeKind: 'external', assigneeUserId: null, assigneeExternal: assignee.name }
@@ -257,34 +294,12 @@ function resolveCreateProjectSlug(ctx: ServiceContext, project: string | undefin
   return INBOX_PROJECT.slug
 }
 
-const SQLITE_BUSY_RE = /SQLITE_BUSY|database is locked/i
-
-/**
- * Write transactions take the SQLite write lock up front. With the default DEFERRED mode two concurrent
- * transactions both start as readers and SQLite answers SQLITE_BUSY immediately when they try to upgrade.
- */
-const IMMEDIATE = { behavior: 'immediate' } as const
-
-/** Retries a write transaction when SQLite reports the database as busy (exponential backoff with jitter). */
-async function withBusyRetry<T>(fn: () => Promise<T>, attempts = 12): Promise<T> {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await fn()
-    }
-    catch (error) {
-      const message = error instanceof Error ? `${error.message} ${String((error as { code?: unknown }).code ?? '')}` : ''
-      if (attempt >= attempts || !SQLITE_BUSY_RE.test(message)) throw error
-      await new Promise(resolve => setTimeout(resolve, Math.min(200, 5 * 2 ** attempt) * (0.5 + Math.random())))
-    }
-  }
-}
-
 export async function createTask(ctx: ServiceContext, rawInput: CreateTaskInput): Promise<TaskDetailDto> {
   const input = parseServiceInput(createTaskSchema, rawInput)
   const project = await getVisibleProjectBySlug(ctx, resolveCreateProjectSlug(ctx, input.project))
   assertCan(ctx, 'task.write', { projectId: project.id })
 
-  const assignee = input.assignee ? await assigneeColumns(ctx, input.assignee) : {}
+  const assignee = input.assignee ? await assigneeColumns(ctx, input.assignee, project.id) : {}
   const blocker = input.blocker ? blockerColumns(ctx, input.blocker) : {}
 
   // Blocking tasks must be writable too (the link touches both tasks).
@@ -347,12 +362,10 @@ export async function createTask(ctx: ServiceContext, rawInput: CreateTaskInput)
     }
 
     if (blockers.length > 0) {
-      const edges = await tx.select({ from: taskLinks.fromTaskId, to: taskLinks.toTaskId })
-        .from(taskLinks)
-        .where(eq(taskLinks.type, 'blocks'))
+      const edges = await loadLiveBlockEdges(tx)
       for (const blocking of blockers) {
         if (wouldCreateCycle(edges, blocking.task.id, taskId)) {
-          throw new ServiceError('invalid', `Adding ${taskKeyOf(blocking)} as a blocker would create a dependency cycle`)
+          throw new ServiceError('invalid', `Adding ${taskKeyOf(blocking)} as a blocker would create a dependency cycle`, because('dependency_cycle'))
         }
         edges.push({ from: blocking.task.id, to: taskId })
       }
@@ -387,7 +400,7 @@ export async function updateTask(ctx: ServiceContext, ref: string, rawInput: Upd
   if (patch.size !== undefined) changes.size = patch.size
   if (patch.executor !== undefined) changes.executor = patch.executor
   if (patch.dueDate !== undefined) changes.dueDate = patch.dueDate
-  if (patch.assignee !== undefined) Object.assign(changes, await assigneeColumns(ctx, patch.assignee))
+  if (patch.assignee !== undefined) Object.assign(changes, await assigneeColumns(ctx, patch.assignee, item.project.id))
   if (patch.blocker !== undefined) Object.assign(changes, blockerColumns(ctx, patch.blocker, task))
   if (patch.status !== undefined) Object.assign(changes, await statusColumns(ctx, task, patch.status))
 
@@ -533,12 +546,18 @@ export interface ProjectContextSummaryDto {
   isInbox: boolean
   counts: TaskCountsByStatus
   openCount: number
+  /** Markdown notes (durable knowledge recorded by earlier sessions). Empty when the actor cannot read them. */
+  notes: string
+  links: ProjectLinkDto[]
 }
 
 export interface ProjectContextDto {
   project: ProjectContextSummaryDto
   inProgress: TaskSummaryDto[]
-  /** Top 5 `todo` tasks by priority, then due date. */
+  /**
+   * Up to 5 `todo` tasks that can be started now (no open "blocked by" dependency), executor ai/mixed first,
+   * then by priority and due date.
+   */
   nextUp: TaskSummaryDto[]
   blocked: TaskSummaryDto[]
   inReview: TaskSummaryDto[]
@@ -546,6 +565,16 @@ export interface ProjectContextDto {
 
 const CONTEXT_LIST_LIMIT = 20
 const NEXT_UP_LIMIT = 5
+/** How many `todo` tasks are scanned to find the next-up candidates. */
+const NEXT_UP_SCAN = 100
+
+/** Startable todo tasks (no open blockers), work Claude can do (ai/mixed) first, keeping the priority order. */
+export function pickNextUp(todo: readonly TaskSummaryDto[], limit = NEXT_UP_LIMIT): TaskSummaryDto[] {
+  const startable = todo.filter(t => t.blockedByKeys.length === 0)
+  const forClaude = startable.filter(t => t.executor !== 'human')
+  const forHuman = startable.filter(t => t.executor === 'human')
+  return [...forClaude, ...forHuman].slice(0, limit)
+}
 
 /** Snapshot of a project for the MCP `get_context` tool (defaults to the session project, then the Inbox). */
 export async function getProjectContext(ctx: ServiceContext, slug?: string): Promise<ProjectContextDto> {
@@ -561,12 +590,14 @@ export async function getProjectContext(ctx: ServiceContext, slug?: string): Pro
     limit,
   }))).items
 
-  const [inProgress, nextUp, blocked, inReview] = await Promise.all([
+  const [inProgress, todo, blocked, inReview] = await Promise.all([
     list('in_progress', CONTEXT_LIST_LIMIT),
-    list('todo', NEXT_UP_LIMIT),
+    list('todo', NEXT_UP_SCAN),
     list('blocked', CONTEXT_LIST_LIMIT),
     list('in_review', CONTEXT_LIST_LIMIT),
   ])
+  const nextUp = pickNextUp(todo)
+  const detail = can(ctx.actor, 'project.readNotes', { projectId: project.id }) ? await getProject(ctx, project.slug) : null
   const info = projectInfoOf(project)
   return {
     project: {
@@ -576,6 +607,8 @@ export async function getProjectContext(ctx: ServiceContext, slug?: string): Pro
       isInbox: project.isInbox,
       counts,
       openCount: openCountOf(counts),
+      notes: detail?.notes ?? '',
+      links: detail?.links ?? [],
     },
     inProgress,
     nextUp,

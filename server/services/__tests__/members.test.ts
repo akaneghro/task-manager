@@ -4,7 +4,7 @@ import { users } from '../../db/schema'
 import { ServiceError } from '../context'
 import { createProject } from '../projects'
 import { inviteMember, listMembers, revokeMember, updateMember } from '../members'
-import { loadMemberships } from '../users'
+import { loadMemberships, resolveGithubLogin } from '../users'
 import { createMemberUser, createTestDb, makeCtx, mcpActor, memberActor, ownerActor } from './helpers'
 import type { TestDb } from './helpers'
 
@@ -41,14 +41,32 @@ describe('members', () => {
     await expectCode(revokeMember(owner(), invited.id), 'not_found')
   })
 
-  it('links the invitation to an existing user and exposes the avatar', async () => {
+  it('never pre-links an invitation to a user found by a possibly stale stored login', async () => {
     const p = await createProject(owner(), { name: 'Alpha', key: 'ALP' })
+    // A former member whose stored login is "guest" (they may have renamed their GitHub account since).
     const userId = await createMemberUser(t.db, 'guest', 50)
     await t.db.update(users).set({ avatarUrl: 'https://avatars/g.png' }).where(eq(users.id, userId))
     const m = await inviteMember(owner(), 'alpha', { githubLogin: 'GUEST', role: 'commenter' })
-    expect(m.userId).toBe(userId)
-    expect(m.avatarUrl).toBe('https://avatars/g.png')
+    expect(m.userId).toBeNull()
+    expect(m.avatarUrl).toBeNull()
+    expect(await loadMemberships(t.db, userId)).toEqual({})
+
+    // The invitation is linked when the live GitHub profile signs in with that login.
+    const user = await resolveGithubLogin(t.db, { id: 50, login: 'guest' }, { login: 'akane' })
+    expect(user?.id).toBe(userId)
     expect(await loadMemberships(t.db, userId)).toEqual({ [p.id]: 'commenter' })
+  })
+
+  it('reactivating a revoked invitation drops the old user link', async () => {
+    const p = await createProject(owner(), { name: 'Alpha', key: 'ALP' })
+    const first = await inviteMember(owner(), 'alpha', { githubLogin: 'bob' })
+    const oldUser = await resolveGithubLogin(t.db, { id: 70, login: 'bob' }, { login: 'akane' })
+    expect(oldUser).not.toBeNull()
+    await revokeMember(owner(), first.id)
+    const again = await inviteMember(owner(), 'alpha', { githubLogin: 'bob' })
+    expect(again.userId).toBeNull()
+    expect(await loadMemberships(t.db, oldUser?.id ?? '')).toEqual({})
+    expect(p.id).toBe(again.projectId)
   })
 
   it('reactivates a revoked login instead of creating a new row', async () => {

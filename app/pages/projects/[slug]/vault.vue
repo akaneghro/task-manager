@@ -46,7 +46,9 @@ const { t } = useI18n()
 const apiError = useApiError()
 
 const slug = computed(() => String(route.params.slug))
-const { project, pending, error } = useProject(slug)
+const { project, pending, error, ready } = useProject(slug)
+// Unknown projects render an in-page message but still answer with the real HTTP status (like the public pages).
+await useSsrStatus(ready, () => apiError.status(error.value))
 
 usePageTitle(() => (project.value ? `${project.value.name} · ${t('vault.title')}` : null))
 </script>

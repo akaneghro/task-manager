@@ -1,15 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { InMemoryTransport } from '@modelcontextprotocol/server'
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
-import { createTestDb, makeCtx, mcpActor, ownerActor } from '../../services/__tests__/helpers'
+import { addProjectMember, createMemberUser, createTestDb, makeCtx, mcpActor, ownerActor } from '../../services/__tests__/helpers'
 import type { TestDb } from '../../services/__tests__/helpers'
-import { ensureInbox, createProject } from '../../services/projects'
+import { ensureInbox, createProject, getProject } from '../../services/projects'
+import { addComment } from '../../services/comments'
 import { createAccount, listAccounts } from '../../services/accounts'
 import { getTask } from '../../services/tasks'
 import type { ServiceContext } from '../../services/context'
 import { MCP_PROMPT_NAMES, MCP_TOOL_NAMES, buildMcpServer, createTaskManagerMcpHandler } from '../server'
-import { mcpActorFromAuthInfo, mcpActorFromToken, mcpAuthInfo, parseDefaultProject } from '../actor'
-import { compactJson } from '../result'
+import { mcpActorFromAuthInfo, mcpActorFromToken, mcpAuthInfo, parseDefaultProject, rawDefaultProject } from '../actor'
+import { compactJson, recoveryHint } from '../result'
 
 interface ToolOutcome {
   isError: boolean
@@ -75,15 +76,16 @@ afterEach(async () => {
 })
 
 describe('mcp server: discovery', () => {
-  it('lists the 17 tools with object input schemas and annotations', async () => {
+  it('lists the 19 tools with object input schemas and annotations', async () => {
     const client = await connect(mcpCtx())
     const { tools } = await client.listTools()
     expect(tools.map(tool => tool.name).sort()).toEqual([...MCP_TOOL_NAMES].sort())
-    expect(tools).toHaveLength(17)
+    expect(tools).toHaveLength(19)
     for (const tool of tools) {
       expect(tool.inputSchema.type).toBe('object')
       expect(tool.description?.length ?? 0).toBeGreaterThan(40)
-      expect(tool.annotations?.destructiveHint).toBe(false)
+      // Only unlink_tasks removes data (dependency links); nothing deletes tasks or projects.
+      expect(tool.annotations?.destructiveHint, tool.name).toBe(tool.name === 'unlink_tasks')
       expect(tool.annotations?.openWorldHint).toBe(false)
     }
     const byName = new Map(tools.map(tool => [tool.name, tool]))
@@ -92,10 +94,14 @@ describe('mcp server: discovery', () => {
     }
     expect(byName.get('create_task')?.annotations?.readOnlyHint).toBe(false)
     expect(byName.get('toggle_checklist_item')?.annotations?.idempotentHint).toBe(true)
-    expect(byName.get('set_status')?.annotations?.idempotentHint).toBe(true)
+    // set_status with a note adds a comment on every call: not idempotent.
+    expect(byName.get('set_status')?.annotations?.idempotentHint).toBe(false)
+    expect(byName.get('link_tasks')?.annotations?.idempotentHint).toBe(true)
+    expect(byName.get('unlink_tasks')?.annotations?.destructiveHint).toBe(true)
     expect(Object.keys(byName.get('create_task')?.inputSchema.properties ?? {})).toEqual(expect.arrayContaining([
-      'project', 'title', 'description', 'status', 'priority', 'type', 'size', 'executor', 'assignee', 'dueDate', 'checklist', 'blockedBy',
+      'project', 'title', 'description', 'status', 'priority', 'type', 'size', 'executor', 'assignee', 'dueDate', 'blocker', 'checklist', 'blockedBy',
     ]))
+    expect(Object.keys(byName.get('list_tasks')?.inputSchema.properties ?? {})).toContain('q')
     expect(byName.get('update_task')?.inputSchema.required).toEqual(expect.arrayContaining(['ref', 'expectedVersion', 'patch']))
     expect(client.getInstructions()).toContain('get_context')
   })
@@ -157,8 +163,56 @@ describe('mcp server: tasks', () => {
     const missing = await call(client, 'get_task', { ref: 'DEM-99' })
     expect(missing).toMatchObject({ isError: true })
     expect(missing.text).toContain('Not found')
+    expect(missing.text).toContain('search_tasks')
     const badProject = await call(client, 'create_task', { project: 'nope', title: 'x' })
     expect(badProject.isError).toBe(true)
+    expect(badProject.text).toContain('list_projects')
+  })
+
+  it('accepts the project key where a slug is expected', async () => {
+    const client = await connect(mcpCtx())
+    const created = json<CreatedTask>(await call(client, 'create_task', { project: 'OTH', title: 'By key' }))
+    expect(created).toMatchObject({ key: 'OTH-1', project: 'other' })
+    const rows = json<{ project: string, tasks: Array<{ key: string }> }>(await call(client, 'list_tasks', { project: 'oth' }))
+    expect(rows).toMatchObject({ project: 'other', tasks: [{ key: 'OTH-1' }] })
+  })
+
+  it('create_task takes a third-party blocker; list_tasks filters by text', async () => {
+    const client = await connect(mcpCtx())
+    json(await call(client, 'create_task', { title: 'Publish logo', status: 'blocked', blocker: { who: 'Client', what: 'Logo files' } }))
+    json(await call(client, 'create_task', { title: 'Unrelated' }))
+    const task = json<TaskView & { blocker?: { who: string, what: string, since?: string } }>(await call(client, 'get_task', { ref: 'DEM-1' }))
+    expect(task).toMatchObject({ status: 'blocked', blocker: { who: 'Client', what: 'Logo files' } })
+    expect(task.blocker?.since).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    const rows = json<{ total: number, tasks: Array<{ key: string }> }>(await call(client, 'list_tasks', { q: 'logo' }))
+    expect(rows.tasks.map(r => r.key)).toEqual(['DEM-1'])
+  })
+
+  it('assigns invited members by GitHub login and rejects other logins', async () => {
+    const client = await connect(mcpCtx())
+    const memberId = await createMemberUser(t.db, 'ana-gh', 40)
+    const demo = await getProject(ownerCtx, 'demo')
+    await addProjectMember(t.db, demo.id, memberId, 'ana-gh', 'commenter')
+    const created = json<CreatedTask>(await call(client, 'create_task', { title: 'Review copy', assignee: { member: 'Ana-GH' } }))
+    const task = json<TaskView>(await call(client, 'get_task', { ref: created.key }))
+    expect(task.assignee).toEqual({ member: 'ana-gh' })
+    const outsider = await call(client, 'update_task', { ref: created.key, expectedVersion: 1, patch: { assignee: { member: 'stranger' } } })
+    expect(outsider.isError).toBe(true)
+    expect(outsider.text).toContain('not an accepted member')
+  })
+
+  it('get_task returns the latest 20 comments and all of them on request', async () => {
+    const client = await connect(mcpCtx())
+    json(await call(client, 'create_task', { title: 'Chatty' }))
+    for (let i = 1; i <= 23; i++) await addComment(ownerCtx, 'DEM-1', `c${i}`)
+    const latest = json<TaskView & { olderComments?: number, olderCommentsHint?: string }>(await call(client, 'get_task', { ref: 'DEM-1' }))
+    expect(latest.comments).toHaveLength(20)
+    expect(latest.olderComments).toBe(3)
+    expect(latest.olderCommentsHint).toContain('"all"')
+    const all = json<TaskView & { olderComments?: number }>(await call(client, 'get_task', { ref: 'DEM-1', comments: 'all' }))
+    expect(all.comments?.map(c => c.body)[0]).toBe('c1')
+    expect(all.comments).toHaveLength(23)
+    expect(all.olderComments).toBeUndefined()
   })
 
   it('set_status stores the note as a comment and the blocker', async () => {
@@ -207,7 +261,7 @@ describe('mcp server: tasks', () => {
     expect((await call(client, 'toggle_checklist_item', { ref: 'DEM-1', index: 9, done: true })).isError).toBe(true)
   })
 
-  it('link_tasks adds and removes dependencies and rejects cycles', async () => {
+  it('link_tasks adds dependencies, unlink_tasks removes them, cycles are rejected', async () => {
     const client = await connect(mcpCtx())
     json(await call(client, 'create_task', { title: 'A' }))
     json(await call(client, 'create_task', { title: 'B' }))
@@ -222,8 +276,10 @@ describe('mcp server: tasks', () => {
     expect(cycle.isError).toBe(true)
     expect(cycle.text).toContain('cycle')
 
-    const removed = json<{ blockedBy: Array<{ key: string }> }>(await call(client, 'link_tasks', { ref: 'DEM-1', blockedBy: 'OTH-1', remove: true }))
+    const removed = json<{ blockedBy: Array<{ key: string }> }>(await call(client, 'unlink_tasks', { ref: 'DEM-1', blockedBy: 'OTH-1' }))
     expect(removed.blockedBy.map(l => l.key)).toEqual(['DEM-2'])
+    const again = json<{ blockedBy: Array<{ key: string }> }>(await call(client, 'unlink_tasks', { ref: 'DEM-1', blockedBy: ['OTH-1'] }))
+    expect(again.blockedBy.map(l => l.key)).toEqual(['DEM-2'])
 
     const created = json<CreatedTask>(await call(client, 'create_task', { title: 'D', blockedBy: ['DEM-1'] }))
     const d = json<TaskView>(await call(client, 'get_task', { ref: created.key }))
@@ -271,9 +327,39 @@ describe('mcp server: projects and context', () => {
     expect(context.project).toMatchObject({ slug: 'demo', openTasks: 2 })
     expect(context.nextUp.map(r => r.key)).toEqual(['DEM-1'])
     expect(context.inProgress.map(r => r.key)).toEqual(['DEM-2'])
+    expect(context.project).not.toHaveProperty('notes')
 
     const other = json<{ project: { slug: string } }>(await call(client, 'get_context', { project: 'other' }))
     expect(other.project.slug).toBe('other')
+  })
+
+  it('get_context returns the project notes (preview) and links written by earlier sessions', async () => {
+    const client = await connect(mcpCtx())
+    json(await call(client, 'update_project_notes', { mode: 'append', content: 'Run the migrations before tests; staging uses branch X' }))
+    json(await call(client, 'update_project_links', { links: [{ kind: 'staging', label: 'Staging', url: 'https://staging.example.com' }] }))
+    const context = json<{ project: { notes?: string, notesTruncated?: boolean, links?: Array<{ url: string, kind: string }> } }>(await call(client, 'get_context'))
+    expect(context.project.notes).toBe('Run the migrations before tests; staging uses branch X')
+    expect(context.project.notesTruncated).toBeUndefined()
+    expect(context.project.links).toEqual([{ kind: 'staging', label: 'Staging', url: 'https://staging.example.com' }])
+
+    json(await call(client, 'update_project_notes', { mode: 'append', content: 'x'.repeat(4000) }))
+    const long = json<{ project: { notes?: string, notesTruncated?: boolean, notesLength?: number } }>(await call(client, 'get_context'))
+    expect(long.project.notes).toHaveLength(3000)
+    expect(long.project).toMatchObject({ notesTruncated: true })
+    expect(long.project.notesLength).toBeGreaterThan(4000)
+  })
+
+  it('update_project_links adds or updates links by URL and never removes any', async () => {
+    const client = await connect(mcpCtx())
+    json(await call(client, 'update_project_links', { links: [{ kind: 'repo', label: 'Repo', url: 'https://github.com/a/b' }] }))
+    const result = json<{ links: Array<{ kind: string, label: string, url: string }> }>(await call(client, 'update_project_links', {
+      links: [{ label: 'Code', url: 'https://github.com/a/b' }, { kind: 'docs', label: 'Docs', url: 'https://docs.example.com' }],
+    }))
+    expect(result.links).toEqual([
+      { kind: 'repo', label: 'Code', url: 'https://github.com/a/b' },
+      { kind: 'docs', label: 'Docs', url: 'https://docs.example.com' },
+    ])
+    expect((await call(client, 'update_project_links', { links: [{ label: 'Bad', url: 'javascript:alert(1)' }] })).isError).toBe(true)
   })
 
   it('get_context without a default project returns the project list and a hint', async () => {
@@ -336,6 +422,7 @@ describe('mcp server: shared secrets', () => {
     const list = await call(client, 'list_shared_secrets')
     expect(list.isError).toBe(true)
     expect(list.text).toContain('Forbidden')
+    expect(list.text).toContain('Allow secrets')
     const get = await call(client, 'get_shared_secret', { accountId: flaggedId, reason: 'DEM-1 deploy' })
     expect(get.isError).toBe(true)
     expect(get.text).not.toContain('sk_test_123')
@@ -411,12 +498,22 @@ describe('mcp actor helpers', () => {
     expect(mcpActorFromAuthInfo({ token: 'x', clientId: 'x', scopes: [], extra: { tokenId: 1 } })).toBeNull()
   })
 
-  it('parses the default project and ignores invalid values', () => {
+  it('parses the default project; invalid values parse to null but are still visible as raw values', () => {
+    expect(rawDefaultProject(' Web_Shop ')).toBe('Web_Shop')
+    expect(parseDefaultProject(rawDefaultProject('Web_Shop'))).toBeNull()
+    expect(rawDefaultProject('  ')).toBeNull()
+    expect(rawDefaultProject(['a', 'b'])).toBe('a')
     expect(parseDefaultProject('Demo')).toBe('demo')
     expect(parseDefaultProject(['my-app', 'x'])).toBe('my-app')
     expect(parseDefaultProject('')).toBeNull()
     expect(parseDefaultProject('../etc')).toBeNull()
     expect(parseDefaultProject(undefined)).toBeNull()
+  })
+
+  it('adds recovery hints to dead-end errors', () => {
+    expect(recoveryHint('not_found', 'Task "X-1" not found')).toContain('search_tasks')
+    expect(recoveryHint('forbidden', 'Not allowed: secret.readShared')).toContain('Allow secrets')
+    expect(recoveryHint('invalid', 'title: Required')).toBeNull()
   })
 
   it('compactJson drops nulls', () => {

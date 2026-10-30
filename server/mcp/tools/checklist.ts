@@ -1,4 +1,5 @@
-// Checklist, comment and dependency tools: add_checklist_items, toggle_checklist_item, add_comment, link_tasks.
+// Checklist, comment and dependency tools: add_checklist_items, toggle_checklist_item, add_comment, link_tasks,
+// unlink_tasks.
 
 import { z } from 'zod'
 import { addChecklistItems, toggleChecklistItem } from '../../services/checklist'
@@ -8,7 +9,7 @@ import { getTask } from '../../services/tasks'
 import { ServiceError, isServiceError } from '../../services/context'
 import type { TaskDetailDto } from '../../../shared/types/dto'
 import { jsonResult, runTool } from '../result'
-import { IDEMPOTENT_WRITE, WRITE, taskRefParam } from './common'
+import { DESTRUCTIVE_IDEMPOTENT_WRITE, IDEMPOTENT_WRITE, WRITE, taskRefParam } from './common'
 import type { ToolRegistrar } from './common'
 import { compactChecklist } from './format'
 
@@ -67,19 +68,9 @@ export const registerChecklistTools: ToolRegistrar = (server, ctx) => {
     return jsonResult({ ref, commentId: comment.id, createdAt: comment.createdAt })
   }))
 
-  server.registerTool('link_tasks', {
-    title: 'Link task dependencies',
-    description: 'Records that task "ref" is blocked by other task(s) (they must be finished first), across projects '
-      + 'too. With remove=true the links are removed instead. Self links and dependency cycles are rejected; existing '
-      + 'links are kept as is.',
-    inputSchema: z.object({
-      ref: taskRefParam.describe('The task that is blocked.'),
-      blockedBy: z.union([taskRefParam, z.array(taskRefParam).min(1).max(20)])
-        .describe('Key (or list of keys) of the blocking task(s).'),
-      remove: z.boolean().optional().describe('true removes the links instead of adding them.'),
-    }),
-    annotations: WRITE,
-  }, ({ ref, blockedBy, remove }) => runTool(async () => {
+  const blockedByParam = z.union([taskRefParam, z.array(taskRefParam).min(1).max(20)])
+
+  async function applyLinks(ref: string, blockedBy: string | string[], remove: boolean) {
     const refs = Array.isArray(blockedBy) ? blockedBy : [blockedBy]
     const applied: string[] = []
     let task: TaskDetailDto | null = null
@@ -96,5 +87,29 @@ export const registerChecklistTools: ToolRegistrar = (server, ctx) => {
       }
     }
     return jsonResult(compactDependencies(task ?? await getTask(ctx, ref)))
-  }))
+  }
+
+  server.registerTool('link_tasks', {
+    title: 'Link task dependencies',
+    description: 'Records that task "ref" is blocked by other task(s) (they must be finished first), across projects '
+      + 'too. Self links and dependency cycles are rejected; links that already exist are kept as is (safe to repeat). '
+      + 'Use unlink_tasks to remove a dependency.',
+    inputSchema: z.object({
+      ref: taskRefParam.describe('The task that is blocked.'),
+      blockedBy: blockedByParam.describe('Key (or list of keys) of the blocking task(s).'),
+    }),
+    annotations: IDEMPOTENT_WRITE,
+  }, ({ ref, blockedBy }) => runTool(() => applyLinks(ref, blockedBy, false)))
+
+  server.registerTool('unlink_tasks', {
+    title: 'Remove task dependencies',
+    description: 'Removes "blocked by" dependencies of task "ref" (the only thing MCP can delete). Only do it when the '
+      + 'dependency is wrong or the user asked; a finished blocker no longer blocks anyway. Removing a link that does '
+      + 'not exist is a no-op.',
+    inputSchema: z.object({
+      ref: taskRefParam.describe('The task that is blocked.'),
+      blockedBy: blockedByParam.describe('Key (or list of keys) of the blocking task(s) to unlink.'),
+    }),
+    annotations: DESTRUCTIVE_IDEMPOTENT_WRITE,
+  }, ({ ref, blockedBy }) => runTool(() => applyLinks(ref, blockedBy, true)))
 }

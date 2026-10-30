@@ -57,7 +57,8 @@
       "member": "Miembro",
       "external": "Externo",
       "externalName": "Nombre del responsable externo",
-      "externalPlaceholder": "Nombre…"
+      "externalPlaceholder": "Nombre…",
+      "members": "Miembros del proyecto"
     },
     "fields": {
       "key": "Clave",
@@ -120,7 +121,8 @@
       "dropHere": "Suelta aquí",
       "empty": "Sin tareas",
       "moveConflict": "La tarea cambió en otro sitio; se ha recargado el tablero.",
-      "readonlyCard": "Solo lectura"
+      "readonlyCard": "Solo lectura",
+      "truncated": "Se muestran {shown} de {total} tareas: las cerradas más antiguas no caben en el tablero. Usa los filtros para acotar."
     },
     "card": {
       "blockedBy": "Bloqueada por {keys}",
@@ -164,7 +166,8 @@
       "clearDue": "Quitar fecha",
       "copyKey": "Copiar clave",
       "copied": "Copiado",
-      "readonly": "Solo lectura"
+      "readonly": "Solo lectura",
+      "loadError": "No se pudo cargar la tarea"
     },
     "blocker": {
       "title": "Bloqueo externo",
@@ -232,7 +235,8 @@
       "updated": "Actualizada por {who} {when}",
       "claude": "Claude ({name})",
       "you": "ti",
-      "user": "un usuario"
+      "user": "un usuario",
+      "claudeOnly": "Claude"
     }
   }
 }

@@ -249,7 +249,9 @@ const toast = useToast()
 const apiError = useApiError()
 
 const slug = computed(() => String(route.params.slug))
-const { project, pending, error, setProject } = useProject(slug)
+const { project, pending, error, setProject, ready } = useProject(slug)
+// Unknown projects render an in-page message but still answer with the real HTTP status (like the public pages).
+await useSsrStatus(ready, () => apiError.status(error.value))
 
 usePageTitle(() => project.value?.name)
 
@@ -294,7 +296,7 @@ async function saveNotes() {
     if (apiError.isConflict(err)) {
       const latest = apiError.details(err)
       if (isProjectDetail(latest)) setProject(latest)
-      else await refreshNuxtData(`tm:project:${current.slug}`)
+      else await refreshNuxtData(projectDataKey(current.slug))
       conflictMessage.value = t('project.notesConflict')
     }
     else {
@@ -308,5 +310,12 @@ async function saveNotes() {
 
 onBeforeRouteLeave(() => {
   editing.value = false
+})
+
+// Notes/links/counts changed elsewhere (e.g. Claude appending notes): reload, but never under an open draft.
+useAutoRefresh({
+  project: slug,
+  refresh: () => refreshNuxtData(projectDataKey(slug.value)),
+  paused: () => editing.value || saving.value,
 })
 </script>

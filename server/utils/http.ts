@@ -4,7 +4,7 @@
 import { z } from 'zod'
 import type { EventHandler, EventHandlerRequest, H3Event } from 'h3'
 import type { ConflictDto } from '../../shared/types/dto'
-import { isServiceError } from '../services/context'
+import { errorReason, isServiceError } from '../services/context'
 import type { ServiceContext, ServiceErrorCode } from '../services/context'
 import { requireActor, serviceContext } from './actor'
 
@@ -61,7 +61,7 @@ export function httpErrorInputOf(error: unknown): HttpErrorInput | null {
   if (isServiceError(error)) {
     const data: HttpErrorData = { code: error.code, message: error.message }
     if (error.details !== undefined) data.details = error.details
-    if (error.code === 'conflict' && error.details !== undefined && error.details !== null) {
+    if (error.code === 'conflict' && error.details !== undefined && error.details !== null && !errorReason(error.details)) {
       // Superset of ConflictDto so clients can read either `details` or `current`.
       data.error = 'version_conflict'
       data.current = error.details
@@ -180,4 +180,15 @@ export function isSameOriginRequest(headers: HeaderBag, host: string, siteUrl: s
   const siteHost = siteUrl ? hostOfUrl(siteUrl) : null
   if (siteHost) allowed.add(siteHost)
   return allowed.has(normalizeHost(sourceHost))
+}
+
+const CSRF_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+/**
+ * Whether a request must pass the CSRF origin check: every state-changing /api/** request. Deliberately ignores
+ * request headers (an `Authorization` header is no exemption, every /api write authenticates from the cookie).
+ */
+export function needsCsrfCheck(method: string, path: string): boolean {
+  const normalized = path.toLowerCase().replace(/\/{2,}/g, '/')
+  return normalized.startsWith('/api/') && !CSRF_SAFE_METHODS.has(method.toUpperCase())
 }

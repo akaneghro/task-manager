@@ -1,6 +1,6 @@
 // Users: GitHub login gate, profile sync and membership loading.
 
-import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm'
 import { projectMembers, projects, users } from '../db/schema'
 import type { UserRow } from '../db/schema'
 import type { Db } from '../db'
@@ -71,12 +71,28 @@ async function upsertUser(db: Db, gh: GithubProfile, role: UserRow['role'], now:
 }
 
 /**
+ * `github_id` of an owner row created by the dev login (`/auth/dev`) without GitHub. Such a row is not pinned
+ * yet: the first real GitHub login that passes the owner bootstrap check adopts it (keeping its data).
+ */
+export const UNPINNED_OWNER_GITHUB_ID = 0
+
+function isOwnerBootstrapProfile(gh: GithubProfile, owner: OwnerConfig): boolean {
+  const ownerLogin = owner.login.trim().toLowerCase()
+  const ownerId = owner.githubId?.trim()
+  const loginMatches = ownerLogin !== '' && gh.login.toLowerCase() === ownerLogin
+  const idMatches = !ownerId || ownerId === String(gh.id)
+  return loginMatches && idMatches
+}
+
+/**
  * Login gate. Returns the (created or refreshed) user, or `null` when the GitHub account may not sign in.
  *
  * - Owner: once an owner row exists it is matched by `github_id` only (login renames are irrelevant).
  *   Before that, the configured login (case-insensitive, plus the github id when configured) bootstraps it.
- * - Anyone else needs an active invitation (`project_members`, not revoked) on a non-deleted project, matched
- *   by GitHub login (case-insensitive) or by an already linked user id. Matching invitations get linked/accepted.
+ *   An owner row left unpinned by the dev login (`github_id` 0) is adopted through the same bootstrap check.
+ * - Anyone else needs an active invitation (`project_members`, not revoked) on a non-deleted project.
+ *   Invitations not linked to anybody yet match by GitHub login (case-insensitive); linked ones only match their
+ *   own user, so an account that registers a freed (renamed) login cannot take over somebody else's invitation.
  */
 export async function resolveGithubLogin(db: Db, gh: GithubProfile, owner: OwnerConfig, now: Date = new Date()): Promise<UserRow | null> {
   if (!Number.isSafeInteger(gh.id) || gh.id <= 0 || !gh.login) return null
@@ -84,20 +100,24 @@ export async function resolveGithubLogin(db: Db, gh: GithubProfile, owner: Owner
   const [ownerRow] = await db.select().from(users).where(eq(users.role, 'owner')).limit(1)
   if (ownerRow) {
     if (ownerRow.githubId === gh.id) return upsertUser(db, gh, 'owner', now)
+    if (ownerRow.githubId <= UNPINNED_OWNER_GITHUB_ID && isOwnerBootstrapProfile(gh, owner)) {
+      const [adopted] = await db.update(users)
+        .set({ githubId: gh.id, ...profileFields(gh, now), role: 'owner' })
+        .where(and(eq(users.id, ownerRow.id), eq(users.githubId, ownerRow.githubId)))
+        .returning()
+      if (adopted) return adopted
+    }
   }
-  else {
-    const ownerLogin = owner.login.trim().toLowerCase()
-    const ownerId = owner.githubId?.trim()
-    const loginMatches = ownerLogin !== '' && gh.login.toLowerCase() === ownerLogin
-    const idMatches = !ownerId || ownerId === String(gh.id)
-    if (loginMatches && idMatches) return upsertUser(db, gh, 'owner', now)
+  else if (isOwnerBootstrapProfile(gh, owner)) {
+    return upsertUser(db, gh, 'owner', now)
   }
 
   const existing = await findUserByGithubId(db, gh.id)
   const login = gh.login.toLowerCase()
+  const unlinkedLoginMatch = and(isNull(projectMembers.userId), sql`lower(${projectMembers.githubLogin}) = ${login}`)
   const matchInvitation = existing
-    ? or(sql`lower(${projectMembers.githubLogin}) = ${login}`, eq(projectMembers.userId, existing.id))
-    : sql`lower(${projectMembers.githubLogin}) = ${login}`
+    ? or(unlinkedLoginMatch, eq(projectMembers.userId, existing.id))
+    : unlinkedLoginMatch
 
   const invitations = await db
     .select({ id: projectMembers.id })
@@ -109,7 +129,10 @@ export async function resolveGithubLogin(db: Db, gh: GithubProfile, owner: Owner
   const user = await upsertUser(db, gh, 'member', now)
   await db.update(projectMembers)
     .set({ userId: user.id, acceptedAt: sql`coalesce(${projectMembers.acceptedAt}, ${now.getTime()})` })
-    .where(inArray(projectMembers.id, invitations.map(i => i.id)))
+    .where(and(
+      inArray(projectMembers.id, invitations.map(i => i.id)),
+      or(isNull(projectMembers.userId), eq(projectMembers.userId, user.id)),
+    ))
   return user
 }
 
@@ -123,15 +146,6 @@ export async function loadMemberships(db: Db, userId: string): Promise<Record<st
   const result: Record<string, MemberRole> = {}
   for (const row of rows) result[row.projectId] = row.role
   return result
-}
-
-/** Most recently seen non-owner user with this GitHub login (case-insensitive), if any. */
-export async function findMemberUserByLogin(db: Db, login: string): Promise<UserRow | null> {
-  const [row] = await db.select().from(users)
-    .where(and(sql`lower(${users.githubLogin}) = ${login.trim().toLowerCase()}`, eq(users.role, 'member')))
-    .orderBy(desc(users.lastLoginAt))
-    .limit(1)
-  return row ?? null
 }
 
 /** The owner row, if it exists yet. */

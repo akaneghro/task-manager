@@ -114,7 +114,7 @@ export function taskFiltersToQuery(filters: TaskFilters): Record<string, string>
 /** Query for `GET /api/tasks`. A fixed `projectSlug` (project page) wins over the project filter. */
 export function taskFiltersToApiQuery(
   filters: TaskFilters,
-  options: { projectSlug?: string | null, forceIncludeClosed?: boolean, limit?: number } = {},
+  options: { projectSlug?: string | null, forceIncludeClosed?: boolean, closedLast?: boolean, limit?: number } = {},
 ): Record<string, string> {
   const query = taskFiltersToQuery(filters)
   const project = options.projectSlug ?? filters.project
@@ -124,6 +124,7 @@ export function taskFiltersToApiQuery(
   const asksClosed = filters.status.some(s => s === 'done' || s === 'cancelled')
   if (filters.includeClosed || options.forceIncludeClosed || asksClosed) query.includeClosed = 'true'
   query.sort = filters.sort
+  if (options.closedLast) query.closedLast = 'true'
   if (options.limit) query.limit = String(options.limit)
   return query
 }

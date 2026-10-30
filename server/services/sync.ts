@@ -4,6 +4,7 @@ import { eq, inArray, sql } from 'drizzle-orm'
 import { comments, projects, tasks } from '../db/schema'
 import type { SyncDto } from '../../shared/types/dto'
 import { can } from '../../shared/utils/permissions'
+import { ALL_PROJECTS } from '../../shared/utils/enums'
 import type { ServiceContext } from './context'
 import { getVisibleProjectBySlug, visibleProjectIds } from './lookup'
 
@@ -19,7 +20,7 @@ function toMillis(value: unknown): number | null {
  */
 export async function getLastChange(ctx: ServiceContext, projectSlug?: string): Promise<SyncDto> {
   const slug = projectSlug?.trim()
-  const projectIds = slug && slug.toLowerCase() !== 'all'
+  const projectIds = slug && slug.toLowerCase() !== ALL_PROJECTS
     ? [(await getVisibleProjectBySlug(ctx, slug)).id]
     : await visibleProjectIds(ctx)
   // Owner and MCP see every project, so deleted projects count too (their removal must be noticed).

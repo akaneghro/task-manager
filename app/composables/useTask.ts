@@ -16,17 +16,23 @@ export function useTask(taskRef: MaybeRefOrGetter<string | null | undefined>) {
   // `useRequestFetch` forwards the session cookie during SSR (plain `$fetch` would hit the API anonymously -> 401).
   const requestFetch = useRequestFetch()
 
-  const { data, pending, error, refresh, status } = useAsyncData<TaskDetailDto | null>(
+  const request = useAsyncData<TaskDetailDto | null>(
     () => (current.value ? taskDataKey(current.value) : 'task:none'),
     () => (current.value
       ? requestFetch<TaskDetailDto>(`/api/tasks/${encodeURIComponent(current.value)}`) as Promise<TaskDetailDto>
       : Promise.resolve(null)),
     { default: () => null },
   )
+  const { data, pending, error, refresh, status } = request
+
+  /** Resolves once the first load settled (await it during SSR to answer with the real HTTP status). */
+  const ready = (async () => {
+    await request
+  })()
 
   function setTask(task: TaskDetailDto | null) {
     data.value = task
   }
 
-  return { task: data, pending, status, error, refresh, setTask, taskRef: current }
+  return { task: data, pending, status, error, refresh, setTask, taskRef: current, ready }
 }

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Db } from '../../db'
-import { projects } from '../../db/schema'
+import { eq } from 'drizzle-orm'
+import { projects, taskLinks } from '../../db/schema'
 import type { ProjectRow } from '../../db/schema'
 import type { Actor } from '../../../shared/utils/permissions'
 import { ServiceError } from '../context'
@@ -92,6 +93,42 @@ describe('task links', () => {
     const detail = await addBlockedBy(mcp, b.key, a.key)
     expect(detail.blockedBy).toHaveLength(1)
     await expectCode(deleteTaskLink(member, detail.blockedBy[0]!.linkId), 'not_found')
+  })
+
+  it('cycle detection ignores links through soft-deleted tasks', async () => {
+    const a = await createTask(ctx, { project: 'abc', title: 'A' })
+    const x = await createTask(ctx, { project: 'abc', title: 'X', blockedBy: [a.key] }) // A blocks X
+    const b = await createTask(ctx, { project: 'abc', title: 'B', blockedBy: [x.key] }) // X blocks B
+    await expectCode(addBlockedBy(ctx, a.key, b.key), 'invalid') // B blocks A: A->X->B->A
+    await deleteTask(ctx, x.key)
+    const detail = await addBlockedBy(ctx, a.key, b.key)
+    expect(detail.blockedBy.map(r => r.key)).toEqual([b.key])
+    // Same for a new task created with blockers.
+    const c = await createTask(ctx, { project: 'abc', title: 'C', blockedBy: [a.key] })
+    expect(c.blockedByKeys).toEqual([a.key])
+  })
+
+  it('cycle detection ignores links into soft-deleted projects', async () => {
+    const a = await createTask(ctx, { project: 'abc', title: 'A' })
+    const x = await createTask(ctx, { project: 'xyz', title: 'X', blockedBy: [a.key] })
+    const b = await createTask(ctx, { project: 'abc', title: 'B', blockedBy: [x.key] })
+    await t.db.update(projects).set({ deletedAt: new Date() }).where(eq(projects.slug, 'xyz'))
+    const detail = await addBlockedBy(ctx, a.key, b.key)
+    expect(detail.blockedBy.map(r => r.key)).toEqual([b.key])
+  })
+
+  it('concurrent opposite links never both succeed (no A<->B cycle)', async () => {
+    const a = await createTask(ctx, { project: 'abc', title: 'A' })
+    const b = await createTask(ctx, { project: 'abc', title: 'B' })
+    const results = await Promise.allSettled([
+      addBlockedBy(ctx, a.key, b.key),
+      addBlockedBy(ctx, b.key, a.key),
+    ])
+    expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1)
+    const rejected = results.find(r => r.status === 'rejected')
+    expect(rejected?.status === 'rejected' ? rejected.reason : null).toMatchObject({ code: 'invalid' })
+    const links = await t.db.select().from(taskLinks)
+    expect(links).toHaveLength(1)
   })
 
   it('ignores deleted blockers', async () => {

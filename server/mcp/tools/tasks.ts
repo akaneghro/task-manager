@@ -3,6 +3,7 @@
 import { z } from 'zod'
 import {
   ASSIGNEE_KINDS,
+  INBOX_PROJECT,
   TASK_EXECUTORS,
   TASK_PRIORITIES,
   TASK_SIZES,
@@ -12,40 +13,60 @@ import {
 import { dateOnlySchema } from '../../../shared/schemas/common'
 import { TASK_SORTS, listTasksQuerySchema } from '../../../shared/schemas/task'
 import type { AssigneeInput, TaskPatch } from '../../../shared/schemas/task'
-import { createTask, getTask, listTasks, parseServiceInput, searchTasks, setTaskStatus, updateTask } from '../../services/tasks'
+import {
+  createTask,
+  getTask,
+  listTasks,
+  memberUserIdByLogin,
+  parseServiceInput,
+  resolveTaskRef,
+  searchTasks,
+  setTaskStatus,
+  updateTask,
+} from '../../services/tasks'
+import type { ServiceContext } from '../../services/context'
+import { listComments } from '../../services/comments'
 import { jsonResult, runTool } from '../result'
 import {
-  IDEMPOTENT_WRITE,
   READ_ONLY,
   WRITE,
   defaultProjectOf,
   expectedVersionParam,
+  listingScope,
   projectParam,
+  resolveProjectArg,
   taskRefParam,
   taskUrl,
 } from './common'
 import type { ToolRegistrar } from './common'
-import { compactTaskDetail, compactTaskRow } from './format'
+import { compactComment, compactTaskDetail, compactTaskRow } from './format'
 
 export const LIST_DEFAULT_LIMIT = 50
 export const LIST_MAX_LIMIT = 200
 const SEARCH_MAX_LIMIT = 50
+/** `get_task` with comments "all": the most recent N comments. */
+export const ALL_COMMENTS_LIMIT = 200
 
 const assigneeParam = z.union([
   z.enum(['none', 'owner', 'claude']),
   z.object({ external: z.string().trim().min(1).max(120) }).strict(),
-]).describe('"none", "owner" (the user), "claude", or {"external": "<name>"} for a third party.')
+  z.object({ member: z.string().trim().min(1).max(39) }).strict(),
+]).describe('"none", "owner" (the user), "claude", {"external": "<name>"} for a third party, or '
+  + '{"member": "<github login>"} for a GitHub user invited to the project who already signed in.')
 
 export type McpAssignee = z.infer<typeof assigneeParam>
 
-export function toAssigneeInput(assignee: McpAssignee): AssigneeInput {
-  return typeof assignee === 'string' ? { kind: assignee } : { kind: 'external', name: assignee.external }
+/** MCP assignee -> service input. Members are named by GitHub login and resolved within `projectId`. */
+export async function toAssigneeInput(ctx: ServiceContext, assignee: McpAssignee, projectId: string): Promise<AssigneeInput> {
+  if (typeof assignee === 'string') return { kind: assignee }
+  if ('external' in assignee) return { kind: 'external', name: assignee.external }
+  return { kind: 'member', userId: await memberUserIdByLogin(ctx, projectId, assignee.member) }
 }
 
 const blockerParam = z.object({
   who: z.string().trim().min(1).max(120).describe('Who we are waiting for (client, provider...).'),
   what: z.string().trim().min(1).max(500).describe('What we are waiting for.'),
-  since: dateOnlySchema.optional().describe('YYYY-MM-DD, default today.'),
+  since: dateOnlySchema.optional().describe('YYYY-MM-DD, default today (owner\'s time zone).'),
 })
 
 const statusParam = z.enum(TASK_STATUSES)
@@ -56,9 +77,11 @@ export const registerTaskTools: ToolRegistrar = (server, ctx) => {
     title: 'List tasks',
     description: 'Lists tasks as compact rows (key, title, status, priority, type, size, executor, due, version, '
       + 'checklist "done/total", blockedBy keys). Defaults to the session project; pass project "all" for every '
-      + 'project. Closed tasks (done/cancelled) are hidden unless includeClosed or a status filter is given.',
+      + 'project. Closed tasks (done/cancelled) are hidden unless includeClosed or a status filter is given. '
+      + '"q" filters by text (title, description, key); search_tasks does the same sorted by last update.',
     inputSchema: z.object({
-      project: projectParam.optional().describe('Project slug, or "all". Default: the session project (or all when none).'),
+      project: projectParam.optional().describe('Project slug (or key), or "all". Default: the session project (or all when none).'),
+      q: z.string().trim().min(1).max(200).optional().describe('Text that title, description or key must contain.'),
       status: z.array(statusParam).optional(),
       priority: z.array(z.enum(TASK_PRIORITIES)).optional(),
       type: z.array(z.enum(TASK_TYPES)).optional(),
@@ -72,11 +95,12 @@ export const registerTaskTools: ToolRegistrar = (server, ctx) => {
     }),
     annotations: READ_ONLY,
   }, args => runTool(async () => {
-    const project = args.project ?? defaultProjectOf(ctx) ?? 'all'
+    const project = await listingScope(ctx, args.project)
     const limit = args.limit ?? LIST_DEFAULT_LIMIT
     const offset = args.offset ?? 0
     const query = parseServiceInput(listTasksQuerySchema, {
       project,
+      q: args.q,
       status: args.status,
       priority: args.priority,
       type: args.type,
@@ -101,11 +125,24 @@ export const registerTaskTools: ToolRegistrar = (server, ctx) => {
   server.registerTool('get_task', {
     title: 'Get task',
     description: 'Returns a task with description, checklist (with 1-based index and id for toggle_checklist_item), '
-      + 'dependencies, third-party blocker, latest comments and "version" (pass it as expectedVersion when updating).',
-    inputSchema: z.object({ ref: taskRefParam }),
+      + 'dependencies, third-party blocker, the latest 20 comments ("olderComments" says how many are not shown; pass '
+      + 'comments "all" to read them) and "version" (pass it as expectedVersion when updating).',
+    inputSchema: z.object({
+      ref: taskRefParam,
+      comments: z.enum(['latest', 'all']).optional().describe(`"latest" (default, last 20) or "all" (up to ${ALL_COMMENTS_LIMIT}).`),
+    }),
     annotations: READ_ONLY,
-  }, ({ ref }) => runTool(async () => {
+  }, ({ ref, comments }) => runTool(async () => {
     const task = await getTask(ctx, ref)
+    if (comments === 'all') {
+      const all = await listComments(ctx, task.key)
+      const shown = all.slice(-ALL_COMMENTS_LIMIT)
+      return jsonResult({
+        ...compactTaskDetail(task),
+        comments: shown.length > 0 ? shown.map(compactComment) : undefined,
+        olderComments: all.length > shown.length ? all.length - shown.length : undefined,
+      }, { structured: true })
+    }
     return jsonResult(compactTaskDetail(task), { structured: true })
   }))
 
@@ -115,7 +152,7 @@ export const registerTaskTools: ToolRegistrar = (server, ctx) => {
       + 'creating a task to avoid duplicates. Searches the session project by default; pass project "all" to search everywhere.',
     inputSchema: z.object({
       query: z.string().trim().min(1).max(200).describe('Words to look for, or a task key.'),
-      project: projectParam.optional().describe('Project slug or "all". Default: the session project (or all when none).'),
+      project: projectParam.optional().describe('Project slug (or key), or "all". Default: the session project (or all when none).'),
       includeClosed: z.boolean().optional().describe('Also search done/cancelled tasks (default false).'),
       limit: z.number().int().min(1).max(SEARCH_MAX_LIMIT).optional().describe('Default 20.'),
     }),
@@ -123,7 +160,7 @@ export const registerTaskTools: ToolRegistrar = (server, ctx) => {
   }, ({ query, project, includeClosed, limit }) => runTool(async () => {
     const items = await searchTasks(ctx, {
       query,
-      project: project ?? defaultProjectOf(ctx) ?? 'all',
+      project: await listingScope(ctx, project),
       includeClosed,
       limit,
     })
@@ -134,9 +171,10 @@ export const registerTaskTools: ToolRegistrar = (server, ctx) => {
     title: 'Create task',
     description: 'Creates a task in the session project (or "project"). Search first to avoid duplicates. Set type and '
       + 'size, executor "ai" for work you will do yourself, and a checklist for multi-step work. Do not set priority, '
-      + 'dueDate or assignee unless the user asked. Returns the new key, version and URL.',
+      + 'dueDate or assignee unless the user asked. For work that is already waiting on a third party use status '
+      + '"blocked" with a blocker {who, what}. Returns the new key, version and URL.',
     inputSchema: z.object({
-      project: projectParam.optional().describe('Project slug. Default: the session project, else the Inbox.'),
+      project: projectParam.optional().describe('Project slug (or key). Default: the session project, else the Inbox.'),
       title: z.string().trim().min(1).max(200).describe('Short imperative title.'),
       description: z.string().max(100_000).optional().describe('Markdown: context, acceptance criteria.'),
       status: statusParam.optional().describe('Default "todo". Use "backlog" for not-yet-planned work.'),
@@ -146,14 +184,21 @@ export const registerTaskTools: ToolRegistrar = (server, ctx) => {
       executor: z.enum(TASK_EXECUTORS).optional().describe('Who does the work: "ai" (default), "human" or "mixed".'),
       assignee: assigneeParam.optional(),
       dueDate: dueParam.optional(),
+      blocker: blockerParam.optional().describe('Third-party blocker (who/what/since); use with status "blocked".'),
       checklist: z.array(z.string().trim().min(1).max(500)).max(50).optional().describe('Checklist items, in order.'),
       blockedBy: z.array(taskRefParam).max(20).optional().describe('Keys of tasks that must be finished first.'),
     }),
     annotations: WRITE,
-  }, ({ assignee, ...input }) => runTool(async () => {
+  }, ({ assignee, project, ...input }) => runTool(async () => {
+    // `project`, else the session default, else the Inbox.
+    const fallback = project ? null : defaultProjectOf(ctx)
+    const target = project
+      ? await resolveProjectArg(ctx, project)
+      : await resolveProjectArg(ctx, fallback ?? INBOX_PROJECT.slug, fallback !== null)
     const task = await createTask(ctx, {
       ...input,
-      assignee: assignee === undefined ? undefined : toAssigneeInput(assignee),
+      project: target.slug,
+      assignee: assignee === undefined ? undefined : await toAssigneeInput(ctx, assignee, target.id),
     })
     return jsonResult({
       key: task.key,
@@ -183,14 +228,17 @@ export const registerTaskTools: ToolRegistrar = (server, ctx) => {
         executor: z.enum(TASK_EXECUTORS).optional(),
         assignee: assigneeParam.optional(),
         dueDate: dueParam.nullable().optional().describe('YYYY-MM-DD, null clears it.'),
-        blocker: blockerParam.nullable().optional().describe('Third-party blocker; null clears it.'),
+        blocker: blockerParam.nullable().optional().describe('Third-party blocker; null clears it (do so when the wait is over).'),
       }).describe('Fields to change.'),
     }),
     annotations: WRITE,
   }, ({ ref, expectedVersion, patch }) => runTool(async () => {
     const { assignee, ...rest } = patch
     const servicePatch: TaskPatch = { ...rest }
-    if (assignee !== undefined) servicePatch.assignee = toAssigneeInput(assignee)
+    if (assignee !== undefined) {
+      const task = await resolveTaskRef(ctx, ref)
+      servicePatch.assignee = await toAssigneeInput(ctx, assignee, task.projectId)
+    }
     const task = await updateTask(ctx, ref, { expectedVersion, patch: servicePatch })
     return jsonResult(compactTaskRow(task), { structured: true })
   }))
@@ -198,9 +246,11 @@ export const registerTaskTools: ToolRegistrar = (server, ctx) => {
   server.registerTool('set_status', {
     title: 'Set task status',
     description: 'Moves a task to another status: "in_progress" when you start, "in_review" when done and the user '
-      + 'should check, "done" when finished, "blocked" + blocker when waiting on a third party. "note" is stored as a '
-      + 'comment. With expectedVersion the change is rejected if the task changed; without it only the status is '
-      + 'written (safe, never touches other fields). Setting the current status again is a no-op.',
+      + 'should check, "done" when finished, "blocked" + blocker when waiting on a third party. The blocker is kept '
+      + 'until cleared: when the wait is over pass blocker null (e.g. status "in_progress", blocker null). "note" is '
+      + 'stored as a new comment on every call (so do not retry a call that succeeded). With expectedVersion the '
+      + 'change is rejected if the task changed; without it only the status (and blocker) is written, never other '
+      + 'fields. Setting the current status again changes nothing else.',
     inputSchema: z.object({
       ref: taskRefParam,
       status: statusParam,
@@ -208,7 +258,8 @@ export const registerTaskTools: ToolRegistrar = (server, ctx) => {
       note: z.string().trim().min(1).max(10_000).optional().describe('Optional comment explaining the change.'),
       blocker: blockerParam.nullable().optional().describe('Third-party blocker (for "blocked"); null clears it.'),
     }),
-    annotations: IDEMPOTENT_WRITE,
+    // Not idempotent: every call with "note" adds a comment.
+    annotations: WRITE,
   }, ({ ref, ...input }) => runTool(async () => {
     const task = await setTaskStatus(ctx, ref, input)
     return jsonResult(compactTaskRow(task), { structured: true })

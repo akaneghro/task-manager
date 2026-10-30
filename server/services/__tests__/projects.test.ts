@@ -95,6 +95,13 @@ describe('createProject', () => {
     await expectServiceError(createProject(owner(), { name: '', key: 'EXC' }), 'invalid')
   })
 
+  it('reserves the "all" slug (it means every project in listings and sync)', async () => {
+    await expectServiceError(createProject(owner(), { name: 'All', key: 'ALL' }), 'invalid')
+    await expectServiceError(createProject(owner(), { name: 'Everything', key: 'EVR', slug: 'all' }), 'invalid')
+    await createProject(owner(), { name: 'Beta', key: 'BET' })
+    await expectServiceError(updateProject(owner(), 'beta', { expectedVersion: 1, slug: 'all' }), 'invalid')
+  })
+
   it('is allowed for MCP but not for members', async () => {
     const mcp = makeCtx(t.db, mcpActor(t.ownerId))
     const p = await createProject(mcp, { name: 'From Claude', key: 'FC' })

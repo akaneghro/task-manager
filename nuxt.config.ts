@@ -34,12 +34,16 @@ export default defineNuxtConfig({
     vaultKey: '',
     databaseUrl: 'file:./data/task-manager.db',
     databaseAuthToken: '',
+    // IANA time zone for server-side "today" defaults (e.g. a blocker's "since"). Empty = Europe/Madrid.
+    timezone: '',
     // Dev-only owner login without GitHub (see server/routes/auth/dev.get.ts)
     devLogin: false,
     session: {
       // Set NUXT_SESSION_PASSWORD (32+ chars). nuxt-auth-utils generates one in dev if missing.
       password: '',
       maxAge: 60 * 60 * 24 * 30,
+      // Explicit: Lax keeps the session cookie out of cross-site frames and cross-site subrequests.
+      cookie: { sameSite: 'lax' },
     },
     oauth: {
       github: {

@@ -121,6 +121,27 @@ describe('getPublicProject', () => {
     expect(JSON.stringify(dto)).not.toContain('github.com/a/b')
   })
 
+  it('does not expose actor sources (token names, user ids) in public task summaries', async () => {
+    const p = await createProject(owner(), { name: 'Alpha', key: 'ALP' })
+    await t.db.insert(tasks).values({
+      projectId: p.id,
+      number: 1,
+      title: 'By Claude',
+      status: 'todo',
+      position: 1,
+      createdBy: 'mcp:laptop-token-name',
+      updatedBy: `user:${t.ownerId}`,
+    })
+    const link = await createShareLink(owner(), 'alpha', {})
+    const resolved = await resolveShareToken(t.db, link.token)
+    const actor: Actor = { kind: 'public', projectId: resolved?.projectId ?? '', shareLinkId: resolved?.shareLinkId ?? '', source: `public:${resolved?.shareLinkId}` }
+    const dto = await getPublicProject(makeCtx(t.db, actor))
+    const json = JSON.stringify(dto)
+    expect(json).not.toContain('laptop-token-name')
+    expect(json).not.toContain(t.ownerId)
+    expect(dto.tasks[0]).toMatchObject({ createdBy: 'mcp:', updatedBy: 'user:' })
+  })
+
   it('requires a public actor', async () => {
     await expectCode(getPublicProject(owner()), 'forbidden')
   })

@@ -117,7 +117,7 @@
         <button
           type="button"
           class="btn-ghost px-2 py-1 text-xs"
-          @click="editing = false"
+          @click="cancel"
         >
           {{ $t('tasks.detail.cancel') }}
         </button>
@@ -134,7 +134,11 @@ const props = defineProps<{
   blocker: BlockerDto | null
   readonly?: boolean
 }>()
-const emit = defineEmits<{ save: [blocker: BlockerInput | null] }>()
+const emit = defineEmits<{
+  save: [blocker: BlockerInput | null]
+  /** The form was closed without saving. */
+  cancel: []
+}>()
 
 const { locale } = useI18n()
 const id = useId()
@@ -159,6 +163,11 @@ function save() {
   if (since.value) input.since = since.value
   editing.value = false
   emit('save', input)
+}
+
+function cancel() {
+  editing.value = false
+  emit('cancel')
 }
 
 defineExpose({ startEdit })

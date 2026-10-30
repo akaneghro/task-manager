@@ -15,16 +15,19 @@ import {
   getProjectContext,
   getTask,
   listTasks,
+  memberUserIdByLogin,
   moveTask,
+  pickNextUp,
   resolveTaskRef,
   searchTasks,
   setTaskStatus,
   updateTask,
 } from '../tasks'
 import { addComment } from '../comments'
-import { addChecklistItems } from '../checklist'
+import { addChecklistItems, updateChecklistItem } from '../checklist'
 import { addBlockedBy } from '../taskLinks'
 import {
+  addProjectMember,
   createMemberUser,
   createTestDb,
   makeCtx,
@@ -107,6 +110,7 @@ describe('createTask', () => {
 
   it('stores assignee, blocker, checklist, blockedBy and completed_at', async () => {
     const memberId = await createMemberUser(t.db, 'alice', 2)
+    await addProjectMember(t.db, abc.id, memberId, 'alice')
     const blocker = await createTask(ctx, { project: 'abc', title: 'Blocker' })
     const task = await createTask(ctx, {
       project: 'abc',
@@ -131,6 +135,14 @@ describe('createTask', () => {
 
   it('rejects unknown assignees, invalid input and readers without write access', async () => {
     await expectServiceError(createTask(ctx, { project: 'abc', title: 'X', assignee: { kind: 'member', userId: crypto.randomUUID() } }), 'invalid')
+    // A known user who is not an accepted member of this very project cannot be assigned.
+    const outsiderId = await createMemberUser(t.db, 'outsider', 9)
+    await expectServiceError(createTask(ctx, { project: 'abc', title: 'X', assignee: { kind: 'member', userId: outsiderId } }), 'invalid')
+    const other = await insertProject(t.db, 'other', 'OTH')
+    await addProjectMember(t.db, other.id, outsiderId, 'outsider')
+    await expectServiceError(createTask(ctx, { project: 'abc', title: 'X', assignee: { kind: 'member', userId: outsiderId } }), 'invalid')
+    expect(await memberUserIdByLogin(ctx, other.id, '@Outsider')).toBe(outsiderId)
+    await expectServiceError(memberUserIdByLogin(ctx, abc.id, 'outsider'), 'invalid')
     await expectServiceError(createTask(ctx, { project: 'abc', title: '' }), 'invalid')
     await expectServiceError(createTask(ctx, { project: 'nope', title: 'X' }), 'not_found')
     const memberId = await createMemberUser(t.db, 'bob', 3)
@@ -196,6 +208,36 @@ describe('resolveTaskRef / getTask', () => {
     const viewer = await getTask(ctxFor(memberActor(memberId, { [abc.id]: 'viewer' })), task.key)
     expect(viewer.comments.map(c => c.body)).toEqual(['internal note'])
   })
+
+  it('public payloads never carry internal actor identifiers (user ids, token names, member logins)', async () => {
+    const memberId = await createMemberUser(t.db, 'hidden-collaborator', 7)
+    await addProjectMember(t.db, abc.id, memberId, 'hidden-collaborator')
+    const mcp = ctxFor(mcpActor(t.ownerId, { tokenName: 'work-laptop-token' }))
+    const task = await createTask(mcp, { project: 'abc', title: 'By Claude', checklist: ['step'], assignee: { kind: 'member', userId: memberId } })
+    await updateTask(ctx, task.key, { expectedVersion: 1, patch: { priority: 'high' } })
+    const item = task.checklist[0]!
+    await updateChecklistItem(mcp, item.id, { done: true })
+
+    const pub = ctxFor(publicActor(abc.id))
+    const detail = await getTask(pub, task.key)
+    const list = await listTasks(pub, query({ project: 'abc' }))
+    for (const payload of [JSON.stringify(detail), JSON.stringify(list)]) {
+      expect(payload).not.toContain('work-laptop')
+      expect(payload).not.toContain(t.ownerId)
+      expect(payload).not.toContain(memberId)
+      expect(payload).not.toContain('hidden-collaborator')
+      expect(payload).not.toMatch(/"(mcp|user):[^"]/)
+    }
+    expect(detail.createdBy).toBe('mcp:')
+    expect(detail.updatedBy).toBe('user:')
+    expect(detail.checklist[0]?.doneBy).toBe('mcp:')
+    expect(detail.assignee).toEqual({ kind: 'member', userId: null, name: null })
+
+    // Authenticated readers still get the full sources.
+    const own = await getTask(ctx, task.key)
+    expect(own.createdBy).toBe('mcp:work-laptop-token')
+    expect(own.assignee.name).toBe('hidden-collaborator')
+  })
 })
 
 describe('listTasks', () => {
@@ -256,6 +298,17 @@ describe('listTasks', () => {
     const page = await listTasks(ctx, query({ sort: 'key', limit: 2, offset: 1 }))
     expect(page.total).toBe(4)
     expect(page.items.map(i => i.key)).toEqual([b.key, c.key])
+  })
+
+  it('closedLast keeps open tasks ahead of closed ones so a limit only truncates closed cards', async () => {
+    await createTask(ctx, { project: 'abc', title: 'Old urgent', status: 'done', priority: 'urgent' })
+    await createTask(ctx, { project: 'abc', title: 'Old high', status: 'cancelled', priority: 'high' })
+    await createTask(ctx, { project: 'abc', title: 'Open low', priority: 'low' })
+    const plain = await listTasks(ctx, query({ includeClosed: true, limit: 1 }))
+    expect(plain.items.map(i => i.title)).toEqual(['Old urgent'])
+    const board = await listTasks(ctx, query({ includeClosed: true, closedLast: 'true', limit: 1 }))
+    expect(board.items.map(i => i.title)).toEqual(['Open low'])
+    expect(board.total).toBe(3)
   })
 
   it('computes summary aggregates', async () => {
@@ -415,7 +468,26 @@ describe('getProjectContext', () => {
     expect(context.inReview.map(i => i.title)).toEqual(['Review me'])
     expect(context.blocked.map(i => i.title)).toEqual(['Waiting'])
     expect(context.nextUp.map(i => i.title)).toEqual(['Todo 1', 'Todo 3', 'Todo 2', 'Todo 5', 'Todo 0'])
+    expect(context.project.notes).toBe('')
     expect((await getProjectContext(ctx)).project.slug).toBe('inbox')
+  })
+
+  it('nextUp skips dependency-blocked todos and puts work Claude can do first', async () => {
+    const blocker = await createTask(ctx, { project: 'abc', title: 'Prerequisite', status: 'in_progress' })
+    for (let i = 0; i < 5; i++) await createTask(ctx, { project: 'abc', title: `Call client ${i}`, priority: 'urgent', executor: 'human' })
+    await createTask(ctx, { project: 'abc', title: 'Waits on prerequisite', priority: 'urgent', blockedBy: [blocker.key] })
+    await createTask(ctx, { project: 'abc', title: 'Code it', priority: 'low' })
+    await createTask(ctx, { project: 'abc', title: 'Pair on it', priority: 'medium', executor: 'mixed' })
+    const context = await getProjectContext(ctxFor(mcpActor(t.ownerId, { defaultProject: 'abc' })))
+    expect(context.nextUp.map(i => i.title)).toEqual(['Pair on it', 'Code it', 'Call client 0', 'Call client 1', 'Call client 2'])
+    expect(pickNextUp([])).toEqual([])
+  })
+
+  it('includes the project notes and links', async () => {
+    await t.db.update(projects).set({ notes: 'Run the migrations before tests' }).where(eq(projects.id, abc.id))
+    const context = await getProjectContext(ctxFor(mcpActor(t.ownerId, { defaultProject: 'abc' })))
+    expect(context.project.notes).toBe('Run the migrations before tests')
+    expect(context.project.links).toEqual([])
   })
 })
 

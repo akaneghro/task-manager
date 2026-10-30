@@ -260,10 +260,13 @@ function onNameInput() {
   if (!isEdit.value && !keyTouched.value) form.key = suggestProjectKey(form.name)
 }
 
+/** Translated field errors (the shared zod schemas speak English). */
+const FIELD_ERROR_KEYS = { name: 'projectForm.invalidName', key: 'projectForm.keyHint', slug: 'projectForm.invalidSlug' } as const
+
 function collectErrors(issues: ReadonlyArray<{ path: ReadonlyArray<PropertyKey>, message: string }>) {
   for (const issue of issues) {
     const field = issue.path[0]
-    if ((field === 'name' || field === 'key' || field === 'slug') && !errors[field]) errors[field] = issue.message
+    if ((field === 'name' || field === 'key' || field === 'slug') && !errors[field]) errors[field] = t(FIELD_ERROR_KEYS[field])
   }
 }
 

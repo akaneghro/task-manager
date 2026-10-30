@@ -157,7 +157,9 @@ const { ask } = useConfirm()
 const projectsStore = useProjectsStore()
 
 const slug = computed(() => String(route.params.slug))
-const { project, pending, error, setProject } = useProject(slug)
+const { project, pending, error, setProject, ready } = useProject(slug)
+// Unknown projects render an in-page message but still answer with the real HTTP status (like the public pages).
+await useSsrStatus(ready, () => apiError.status(error.value))
 
 usePageTitle(() => (project.value ? `${project.value.name} · ${t('project.tabs.settings')}` : null))
 

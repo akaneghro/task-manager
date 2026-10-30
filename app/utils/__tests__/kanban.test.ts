@@ -7,6 +7,7 @@ import {
   moveTaskToIndex,
   neighborsForDropIndex,
   neighborsOfItem,
+  sameProjectNeighborsOfItem,
 } from '../kanban'
 import type { KanbanItem } from '../kanban'
 
@@ -85,5 +86,25 @@ describe('kanban helpers', () => {
     expect(isTaskStatus('in_review')).toBe(true)
     expect(isTaskStatus('nope')).toBe(false)
     expect(isTaskStatus(undefined)).toBe(false)
+  })
+})
+
+describe('sameProjectNeighborsOfItem', () => {
+  it('skips cards of other projects (global board)', () => {
+    const column = [
+      { id: 'r1', projectId: 'rnk' },
+      { id: 'w1', projectId: 'web' },
+      { id: 'm', projectId: 'rnk' },
+      { id: 'w2', projectId: 'web' },
+      { id: 'r2', projectId: 'rnk' },
+    ]
+    expect(sameProjectNeighborsOfItem(column, 'm')).toEqual({ beforeId: 'r1', afterId: 'r2' })
+    expect(sameProjectNeighborsOfItem(column.slice(1, 4), 'm')).toEqual({ beforeId: null, afterId: null })
+    expect(sameProjectNeighborsOfItem(column, 'missing')).toEqual({ beforeId: null, afterId: null })
+  })
+
+  it('matches neighborsOfItem on a single-project column', () => {
+    const column = [{ id: 'a', projectId: 'p' }, { id: 'm', projectId: 'p' }, { id: 'b', projectId: 'p' }]
+    expect(sameProjectNeighborsOfItem(column, 'm')).toEqual(neighborsOfItem(column, 'm'))
   })
 })

@@ -24,7 +24,16 @@ export function mcpActorFromToken(token: McpTokenIdentity, defaultProject: strin
   }
 }
 
-/** Normalises a default-project slug from a header/query value. Invalid or empty values are ignored (null). */
+/** The trimmed, non-empty default-project value sent in a header/query (first one if repeated), else null. */
+export function rawDefaultProject(value: unknown): string | null {
+  const raw = Array.isArray(value) ? value[0] : value
+  return typeof raw === 'string' && raw.trim() !== '' ? raw.trim() : null
+}
+
+/**
+ * Normalises a default-project slug from a header/query value; null when empty or not a valid slug. The route
+ * answers 400 when a value was sent but is invalid (see `rawDefaultProject`).
+ */
 export function parseDefaultProject(value: unknown): string | null {
   const raw = Array.isArray(value) ? value[0] : value
   if (typeof raw !== 'string' || raw.trim() === '') return null

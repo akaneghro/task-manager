@@ -55,6 +55,34 @@ export function neighborsOfItem<T extends { id: string }>(column: readonly T[], 
 }
 
 /**
+ * Like `neighborsOfItem`, but only counts cards of the moved card's project: positions are per project, so on
+ * the global board (columns mix projects) the server can only place the card between same-project neighbours.
+ * Skips over cards of other projects to the nearest same-project card above and below.
+ */
+export function sameProjectNeighborsOfItem<T extends { id: string, projectId: string }>(column: readonly T[], movedId: string): DropNeighbors {
+  const index = column.findIndex(item => item.id === movedId)
+  const moved = column[index]
+  if (index === -1 || !moved) return { beforeId: null, afterId: null }
+  let beforeId: string | null = null
+  for (let i = index - 1; i >= 0; i--) {
+    const item = column[i]
+    if (item && item.projectId === moved.projectId) {
+      beforeId = item.id
+      break
+    }
+  }
+  let afterId: string | null = null
+  for (let i = index + 1; i < column.length; i++) {
+    const item = column[i]
+    if (item && item.projectId === moved.projectId) {
+      afterId = item.id
+      break
+    }
+  }
+  return { beforeId, afterId }
+}
+
+/**
  * Optimistically moves a task: new status and a position between its neighbours (same rule as the server).
  * Returns a new array; unknown ids leave the list unchanged.
  */

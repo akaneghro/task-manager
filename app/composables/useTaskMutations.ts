@@ -80,40 +80,116 @@ export function useTaskMutations() {
   const conflict = ref<TaskConflict | null>(null)
   const saving = ref(false)
 
+  /**
+   * Scalar PATCHes are serialized per task: each waits for the previous one and is sent with the version of the
+   * latest server-confirmed task, so quick successive edits (priority then status) never conflict with each
+   * other. `confirmed` is that latest server state; `queued` the edits not settled yet (re-applied optimistically
+   * on top of `confirmed` whenever it changes).
+   */
+  interface QueuedPatch {
+    patch: TaskPatch
+    cancelled: boolean
+  }
+  const queues = new Map<string, Promise<unknown>>()
+  const queued = new Map<string, QueuedPatch[]>()
+  const confirmed = new Map<string, TaskDetailDto>()
+
+  function pendingPatches(taskId: string): QueuedPatch[] {
+    return queued.get(taskId) ?? []
+  }
+
+  /** Whether scalar edits of this task are still being saved (callers keep their optimistic copy meanwhile). */
+  function isPatching(taskId: string): boolean {
+    return pendingPatches(taskId).length > 0
+  }
+
+  /** Latest confirmed task with the edits still in flight applied on top (what the user expects to see). */
+  function optimisticView(taskId: string): TaskDetailDto | null {
+    const base = confirmed.get(taskId)
+    if (!base) return null
+    return pendingPatches(taskId).filter(q => !q.cancelled).reduce((task, q) => applyTaskPatchLocally(task, q.patch), base)
+  }
+
+  function settle(taskId: string, entry: QueuedPatch) {
+    const list = pendingPatches(taskId).filter(q => q !== entry)
+    if (list.length > 0) queued.set(taskId, list)
+    else queued.delete(taskId)
+  }
+
   function reportError(err: unknown) {
     toast.error(apiError.message(err))
   }
 
   /**
-   * PATCH with optimistic UI on `target`. On 409 the previous value is restored and `conflict` is set.
+   * PATCH with optimistic UI on `target`, queued behind any edit of the same task still in flight.
+   * On failure `target` goes back to the latest server-confirmed task (plus the edits still queued); on 409 the
+   * edits queued behind the conflicting one are folded into `conflict.patch` instead of being sent.
    * Returns the saved task or null when it failed.
    */
-  async function patchTask(target: Ref<TaskDetailDto | null>, patch: TaskPatch, expectedVersion?: number): Promise<TaskDetailDto | null> {
-    const previous = target.value
-    if (!previous) return null
-    const version = expectedVersion ?? previous.version
-    target.value = applyTaskPatchLocally(previous, patch)
-    saving.value = true
-    try {
-      const saved = await ui.track(() => apiFetch<TaskDetailDto>(taskUrl(previous.id), {
-        method: 'PATCH',
-        body: { expectedVersion: version, patch },
-      }))
-      // The server returns the full detail (checklist, links and comments included).
-      target.value = saved
-      conflict.value = null
-      return saved
+  function patchTask(target: Ref<TaskDetailDto | null>, patch: TaskPatch, expectedVersion?: number): Promise<TaskDetailDto | null> {
+    const initial = target.value
+    if (!initial) return Promise.resolve(null)
+    const taskId = initial.id
+    // Nothing in flight: what is shown is the server state (the optimistic overlay only exists while queued).
+    if (!isPatching(taskId)) confirmed.set(taskId, initial)
+    const entry: QueuedPatch = { patch, cancelled: false }
+    queued.set(taskId, [...pendingPatches(taskId), entry])
+    target.value = applyTaskPatchLocally(initial, patch)
+
+    const run = async (): Promise<TaskDetailDto | null> => {
+      if (entry.cancelled) {
+        settle(taskId, entry)
+        return null
+      }
+      const base = confirmed.get(taskId) ?? initial
+      const version = expectedVersion ?? base.version
+      saving.value = true
+      try {
+        const saved = await ui.track(() => apiFetch<TaskDetailDto>(taskUrl(taskId), {
+          method: 'PATCH',
+          body: { expectedVersion: version, patch },
+        }))
+        // The server returns the full detail (checklist, links and comments included).
+        confirmed.set(taskId, saved)
+        settle(taskId, entry)
+        if (target.value?.id === taskId) target.value = optimisticView(taskId) ?? saved
+        conflict.value = null
+        return saved
+      }
+      catch (err) {
+        settle(taskId, entry)
+        const current = isConflictError(err) ? conflictCurrentTask(err) : null
+        if (current) {
+          // Edits queued behind this one were made on the same stale view: they become part of the conflict.
+          let merged: TaskPatch = { ...patch }
+          for (const later of pendingPatches(taskId)) {
+            if (later.cancelled) continue
+            later.cancelled = true
+            merged = { ...merged, ...later.patch }
+          }
+          confirmed.set(taskId, current)
+          conflict.value = { patch: merged, current }
+        }
+        else {
+          reportError(err)
+        }
+        if (target.value?.id === taskId) target.value = optimisticView(taskId) ?? confirmed.get(taskId) ?? initial
+        return null
+      }
+      finally {
+        saving.value = isPatching(taskId)
+        if (!isPatching(taskId)) confirmed.delete(taskId)
+      }
     }
-    catch (err) {
-      target.value = previous
-      const current = isConflictError(err) ? conflictCurrentTask(err) : null
-      if (current) conflict.value = { patch, current }
-      else reportError(err)
-      return null
-    }
-    finally {
-      saving.value = false
-    }
+
+    const previousRun = queues.get(taskId) ?? Promise.resolve()
+    const result = previousRun.then(run, run)
+    const tail = result.catch(() => null)
+    queues.set(taskId, tail)
+    void tail.then(() => {
+      if (queues.get(taskId) === tail) queues.delete(taskId)
+    })
+    return result
   }
 
   /** Conflict resolution "Use theirs": show the server state and drop my change. */
@@ -187,6 +263,7 @@ export function useTaskMutations() {
   return {
     conflict,
     saving,
+    isPatching,
     reportError,
     patchTask,
     acceptTheirs,

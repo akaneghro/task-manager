@@ -266,7 +266,7 @@ async function create() {
   const body = { name: name.value.trim(), allowSecrets: allowSecrets.value, expiresInDays: expiresInDays.value }
   const parsed = createTokenSchema.safeParse(body)
   if (!parsed.success) {
-    formError.value = parsed.error.issues[0]?.message ?? t('errors.validation')
+    formError.value = firstIssueField(parsed.error.issues) === 'name' ? t('tokens.invalidName') : t('errors.validation')
     return
   }
   creating.value = true

@@ -19,7 +19,7 @@ import type {
   TaskSummaryDto,
 } from '../../shared/types/dto'
 import { findProjectRowById, findProjectRowByKey, visibleProjectIds } from './lookup'
-import { ServiceError, nowOf } from './context'
+import { DEFAULT_TIME_ZONE, ServiceError, nowOf } from './context'
 import type { ServiceContext } from './context'
 
 /** Minimal project data needed to render a task. */
@@ -51,9 +51,24 @@ export function isoOrNull(date: Date | null | undefined): string | null {
   return date ? date.toISOString() : null
 }
 
-/** Today as `YYYY-MM-DD` (UTC) according to the context clock. */
+function calendarDateIn(date: Date, timeZone: string): string | null {
+  try {
+    // en-CA formats as YYYY-MM-DD.
+    return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date)
+  }
+  catch {
+    return null // unknown time zone
+  }
+}
+
+/**
+ * Today as `YYYY-MM-DD` in the configured time zone (`ctx.timeZone`, default `DEFAULT_TIME_ZONE`) according to
+ * the context clock, so server defaults match the local calendar date the UI uses. Falls back to UTC when the
+ * zone is invalid.
+ */
 export function todayOf(ctx: ServiceContext): string {
-  return nowOf(ctx).toISOString().slice(0, 10)
+  const now = nowOf(ctx)
+  return calendarDateIn(now, ctx.timeZone || DEFAULT_TIME_ZONE) ?? now.toISOString().slice(0, 10)
 }
 
 export function projectInfoOf(row: ProjectRow): TaskProjectInfo {
@@ -140,9 +155,19 @@ function blockerOf(task: TaskRow): BlockerDto | null {
   return { who: task.blockerWho, what: task.blockerWhat, since: task.blockerSince ?? null }
 }
 
-function assigneeOf(task: TaskRow, logins: ReadonlyMap<string, string>): AssigneeDto {
+/**
+ * Public share links never see internal actor identifiers (user ids, API token names): sources are reduced to
+ * `mcp:` (Claude) or `user:` (a person), with no id or name.
+ */
+export function publicSource(source: string): string {
+  return source.startsWith('mcp:') ? 'mcp:' : 'user:'
+}
+
+function assigneeOf(task: TaskRow, logins: ReadonlyMap<string, string>, isPublic: boolean): AssigneeDto {
   switch (task.assigneeKind) {
     case 'member':
+      // Public links do not learn which GitHub accounts collaborate on the project.
+      if (isPublic) return { kind: 'member', userId: null, name: null }
       return {
         kind: 'member',
         userId: task.assigneeUserId ?? null,
@@ -165,6 +190,7 @@ export async function buildTaskSummaries(
   const db = ctx.db
   const taskIds = items.map(i => i.task.id)
   const visible = visibleIds ?? await visibleProjectIds(ctx)
+  const isPublic = ctx.actor.kind === 'public'
 
   const checklistRows = await db.select({
     taskId: taskChecklistItems.taskId,
@@ -211,7 +237,7 @@ export async function buildTaskSummaries(
 
   const memberIds = [...new Set(items.map(i => i.task.assigneeUserId).filter((v): v is string => typeof v === 'string'))]
   const logins = new Map<string, string>()
-  if (memberIds.length > 0) {
+  if (memberIds.length > 0 && !isPublic) {
     const rows = await db.select({ id: users.id, login: users.githubLogin }).from(users).where(inArray(users.id, memberIds))
     for (const row of rows) logins.set(row.id, row.login)
   }
@@ -232,7 +258,7 @@ export async function buildTaskSummaries(
       type: task.type,
       size: task.size ?? null,
       executor: task.executor,
-      assignee: assigneeOf(task, logins),
+      assignee: assigneeOf(task, logins, isPublic),
       dueDate: task.dueDate ?? null,
       blocker: blockerOf(task),
       position: task.position,
@@ -244,8 +270,8 @@ export async function buildTaskSummaries(
       completedAt: isoOrNull(task.completedAt),
       createdAt: iso(task.createdAt),
       updatedAt: iso(task.updatedAt),
-      createdBy: task.createdBy,
-      updatedBy: task.updatedBy,
+      createdBy: isPublic ? publicSource(task.createdBy) : task.createdBy,
+      updatedBy: isPublic ? publicSource(task.updatedBy) : task.updatedBy,
     }
   })
 }
@@ -404,12 +430,15 @@ export async function buildTaskDetail(ctx: ServiceContext, item: TaskWithProject
   const [summary] = await buildTaskSummaries(ctx, [item], visibleIds)
   if (!summary) throw new Error('Failed to build task summary')
   const projectId = item.project.id
-  const [checklist, blockedBy, blocking] = await Promise.all([
+  const [loadedChecklist, blockedBy, blocking] = await Promise.all([
     loadChecklist(ctx.db, item.task.id),
     loadLinkRefs(ctx, item.task.id, 'blockedBy', visible),
     loadLinkRefs(ctx, item.task.id, 'blocking', visible),
   ])
   const isPublic = ctx.actor.kind === 'public'
+  const checklist = isPublic
+    ? loadedChecklist.map(i => ({ ...i, doneBy: i.doneBy ? publicSource(i.doneBy) : null }))
+    : loadedChecklist
   const commentList = can(ctx.actor, 'comment.read', { projectId })
     ? await loadComments(ctx, item.task.id, projectId, COMMENTS_IN_DETAIL)
     : []

@@ -1,11 +1,11 @@
 // "Blocked by" dependencies between tasks (`task_links` rows of type `blocks`: from blocks to).
 
 import { and, eq } from 'drizzle-orm'
-import { taskLinks } from '../db/schema'
+import { taskLinks, tasks } from '../db/schema'
 import { wouldCreateCycle } from '../../shared/utils/dependencies'
 import { can } from '../../shared/utils/permissions'
 import type { TaskDetailDto } from '../../shared/types/dto'
-import { ServiceError, actorSource, assertCan, nowOf } from './context'
+import { actorSource, assertCan, because, nowOf, ServiceError } from './context'
 import type { ServiceContext } from './context'
 import {
   buildTaskDetail,
@@ -15,6 +15,7 @@ import {
   touchTask,
 } from './taskMappers'
 import type { TaskWithProject } from './taskMappers'
+import { IMMEDIATE, loadLiveBlockEdges, withBusyRetry } from './tx'
 
 async function resolvePair(ctx: ServiceContext, ref: string, blockedByRef: string): Promise<{ task: TaskWithProject, blocker: TaskWithProject }> {
   const task = await resolveTaskWithProject(ctx, ref)
@@ -27,25 +28,30 @@ async function resolvePair(ctx: ServiceContext, ref: string, blockedByRef: strin
 /** Records that `blockedByRef` blocks `ref`. Self links and cycles are rejected; duplicates are no-ops. */
 export async function addBlockedBy(ctx: ServiceContext, ref: string, blockedByRef: string): Promise<TaskDetailDto> {
   const { task, blocker } = await resolvePair(ctx, ref, blockedByRef)
-  if (task.task.id === blocker.task.id) throw new ServiceError('invalid', 'A task cannot block itself')
+  if (task.task.id === blocker.task.id) throw new ServiceError('invalid', 'A task cannot block itself', because('self_link'))
 
-  const edges = await ctx.db.select({ from: taskLinks.fromTaskId, to: taskLinks.toTaskId })
-    .from(taskLinks)
-    .where(eq(taskLinks.type, 'blocks'))
-  const exists = edges.some(e => e.from === blocker.task.id && e.to === task.task.id)
-  if (!exists) {
+  // Edge read, cycle check and insert run in one IMMEDIATE transaction: two concurrent opposite links
+  // (A blocks B / B blocks A) cannot both pass the check against the same old edge set.
+  await withBusyRetry(() => ctx.db.transaction(async (tx) => {
+    const edges = await loadLiveBlockEdges(tx)
+    if (edges.some(e => e.from === blocker.task.id && e.to === task.task.id)) return
     if (wouldCreateCycle(edges, blocker.task.id, task.task.id)) {
-      throw new ServiceError('invalid', `${taskKeyOf(blocker)} cannot block ${taskKeyOf(task)}: it would create a dependency cycle`)
+      throw new ServiceError(
+        'invalid',
+        `${taskKeyOf(blocker)} cannot block ${taskKeyOf(task)}: it would create a dependency cycle`,
+        because('dependency_cycle'),
+      )
     }
-    await ctx.db.insert(taskLinks).values({
+    const now = nowOf(ctx)
+    await tx.insert(taskLinks).values({
       fromTaskId: blocker.task.id,
       toTaskId: task.task.id,
       type: 'blocks',
-      createdAt: nowOf(ctx),
+      createdAt: now,
       createdBy: actorSource(ctx),
     }).onConflictDoNothing()
-    await touchTask(ctx, task.task.id)
-  }
+    await tx.update(tasks).set({ updatedAt: now }).where(eq(tasks.id, task.task.id))
+  }, IMMEDIATE))
   return buildTaskDetail(ctx, await resolveTaskWithProject(ctx, task.task.id))
 }
 

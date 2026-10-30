@@ -54,7 +54,8 @@
           <span class="flex-1 truncate">{{ $t('nav.allTasks') }}</span>
         </NuxtLink>
       </li>
-      <li>
+      <!-- Members only see the Inbox when it was shared with them. -->
+      <li v-if="isOwner || inbox">
         <NuxtLink
           to="/projects/inbox/tasks"
           :class="linkClass('/projects/inbox')"

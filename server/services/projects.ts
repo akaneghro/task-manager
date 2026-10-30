@@ -5,7 +5,7 @@ import type { z } from 'zod'
 import { projectLinks, projects } from '../db/schema'
 import type { ProjectLinkRow, ProjectRow } from '../db/schema'
 import type { Db } from '../db'
-import { INBOX_PROJECT, PROJECT_STATUSES } from '../../shared/utils/enums'
+import { INBOX_PROJECT, PROJECT_STATUSES, isReservedProjectSlug } from '../../shared/utils/enums'
 import type { ProjectStatus } from '../../shared/utils/enums'
 import type { Actor } from '../../shared/utils/permissions'
 import { can, canSeeProject, projectCapabilities } from '../../shared/utils/permissions'
@@ -24,7 +24,7 @@ import type {
 } from '../../shared/schemas/project'
 import { slugSchema } from '../../shared/schemas/common'
 import type { ProjectDetailDto, ProjectLinkDto, ProjectSummaryDto, TaskCountsByStatus } from '../../shared/types/dto'
-import { ServiceError, actorSource, assertCan, nowOf } from './context'
+import { actorSource, assertCan, because, nowOf, ServiceError } from './context'
 import type { ServiceContext } from './context'
 import { countTasksByStatus, emptyCounts, getVisibleProjectBySlug, openCountOf } from './lookup'
 
@@ -219,7 +219,7 @@ async function assertSlugFree(db: Db, slug: string, exceptId?: string): Promise<
   if (row && row.id !== exceptId) {
     throw new ServiceError('conflict', row.deletedAt
       ? `Slug "${slug}" is still reserved by a deleted project; choose another slug`
-      : `Slug "${slug}" is already used by another project`)
+      : `Slug "${slug}" is already used by another project`, because(row.deletedAt ? 'slug_deleted' : 'slug_taken'))
   }
 }
 
@@ -229,7 +229,7 @@ async function assertKeyFree(db: Db, key: string): Promise<void> {
   if (row) {
     throw new ServiceError('conflict', row.deletedAt
       ? `Key "${key}" is still reserved by a deleted project; choose another key`
-      : `Key "${key}" is already used by another project`)
+      : `Key "${key}" is already used by another project`, because(row.deletedAt ? 'key_deleted' : 'key_taken'))
   }
 }
 
@@ -248,8 +248,8 @@ export async function createProject(ctx: ServiceContext, input: CreateProjectInp
   assertCan(ctx, 'project.create')
   const data = parseInput(createProjectSchema, input)
   const slug = data.slug ?? parseDerivedSlug(data.name)
-  if (slug === INBOX_PROJECT.slug) throw new ServiceError('invalid', `Slug "${slug}" is reserved`)
-  if (data.key === INBOX_PROJECT.key) throw new ServiceError('invalid', `Key "${data.key}" is reserved`)
+  if (isReservedProjectSlug(slug)) throw new ServiceError('invalid', `Slug "${slug}" is reserved; choose another slug`, because('reserved_slug'))
+  if (data.key === INBOX_PROJECT.key) throw new ServiceError('invalid', `Key "${data.key}" is reserved`, because('reserved_key'))
   await assertSlugFree(ctx.db, slug)
   await assertKeyFree(ctx.db, data.key)
 
@@ -277,7 +277,7 @@ export async function createProject(ctx: ServiceContext, input: CreateProjectInp
     })
   }
   catch (error) {
-    if (isUniqueViolation(error)) throw new ServiceError('conflict', `A project with slug "${slug}" or key "${data.key}" already exists`)
+    if (isUniqueViolation(error)) throw new ServiceError('conflict', `A project with slug "${slug}" or key "${data.key}" already exists`, because('project_exists'))
     throw error
   }
   return reloadDetail(ctx, id)
@@ -286,7 +286,7 @@ export async function createProject(ctx: ServiceContext, input: CreateProjectInp
 function parseDerivedSlug(name: string): string {
   const derived = slugify(name)
   const result = slugSchema.safeParse(derived)
-  if (!derived || !result.success) throw new ServiceError('invalid', 'Cannot derive a slug from the project name; provide one')
+  if (!derived || !result.success) throw new ServiceError('invalid', 'Cannot derive a slug from the project name; provide one', because('slug_underivable'))
   return result.data
 }
 
@@ -301,11 +301,11 @@ export async function updateProject(ctx: ServiceContext, slug: string, input: Up
   if (row.version !== data.expectedVersion) throw await conflictError(ctx, row.id)
 
   if (row.isInbox) {
-    if (data.slug !== undefined && data.slug !== row.slug) throw new ServiceError('invalid', 'The Inbox slug cannot be changed')
-    if (data.status === 'archived') throw new ServiceError('invalid', 'The Inbox cannot be archived')
+    if (data.slug !== undefined && data.slug !== row.slug) throw new ServiceError('invalid', 'The Inbox slug cannot be changed', because('inbox_slug'))
+    if (data.status === 'archived') throw new ServiceError('invalid', 'The Inbox cannot be archived', because('inbox_archive'))
   }
   if (data.slug !== undefined && data.slug !== row.slug) {
-    if (data.slug === INBOX_PROJECT.slug) throw new ServiceError('invalid', `Slug "${data.slug}" is reserved`)
+    if (isReservedProjectSlug(data.slug)) throw new ServiceError('invalid', `Slug "${data.slug}" is reserved; choose another slug`, because('reserved_slug'))
     await assertSlugFree(ctx.db, data.slug, row.id)
   }
 
@@ -327,7 +327,7 @@ export async function updateProject(ctx: ServiceContext, slug: string, input: Up
       .returning({ id: projects.id })
   }
   catch (error) {
-    if (isUniqueViolation(error)) throw new ServiceError('conflict', `Slug "${data.slug ?? row.slug}" is already used by another project`)
+    if (isUniqueViolation(error)) throw new ServiceError('conflict', `Slug "${data.slug ?? row.slug}" is already used by another project`, because('slug_taken'))
     throw error
   }
   if (updated.length === 0) throw await conflictError(ctx, row.id)
@@ -369,7 +369,7 @@ export async function replaceProjectLinks(ctx: ServiceContext, slug: string, lin
   const row = await getVisibleProjectBySlug(ctx, slug)
   assertCan(ctx, 'project.updateNotes', { projectId: row.id })
   const parsed = links.map(link => parseInput(projectLinkInputSchema, link))
-  if (parsed.length > 30) throw new ServiceError('invalid', 'At most 30 links per project')
+  if (parsed.length > 30) throw new ServiceError('invalid', 'At most 30 links per project', because('too_many_links'))
   const now = nowOf(ctx)
   await ctx.db.transaction(async (tx) => {
     await tx.delete(projectLinks).where(eq(projectLinks.projectId, row.id))
@@ -383,7 +383,7 @@ export async function replaceProjectLinks(ctx: ServiceContext, slug: string, lin
 export async function deleteProject(ctx: ServiceContext, slug: string): Promise<void> {
   const row = await getVisibleProjectBySlug(ctx, slug)
   assertCan(ctx, 'project.delete', { projectId: row.id })
-  if (row.isInbox) throw new ServiceError('forbidden', 'The Inbox cannot be deleted')
+  if (row.isInbox) throw new ServiceError('forbidden', 'The Inbox cannot be deleted', because('inbox_delete'))
   const now = nowOf(ctx)
   await ctx.db.update(projects)
     .set({ deletedAt: now, updatedAt: now, updatedBy: actorSource(ctx) })

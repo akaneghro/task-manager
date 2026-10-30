@@ -126,6 +126,7 @@ export function serviceContext(event: H3Event, actor: Actor): ServiceContext {
     actor,
     vaultKey: usableVaultKey(config.vaultKey),
     siteUrl: config.public.siteUrl || getRequestURL(event).origin,
+    timeZone: String(config.timezone ?? '').trim() || undefined,
   }
 }
 

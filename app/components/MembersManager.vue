@@ -176,7 +176,7 @@ async function invite() {
   const body = { githubLogin: login.value.trim().replace(/^@/, ''), role: role.value }
   const parsed = inviteMemberSchema.safeParse(body)
   if (!parsed.success) {
-    formError.value = parsed.error.issues[0]?.message ?? t('errors.validation')
+    formError.value = firstIssueField(parsed.error.issues) === 'githubLogin' ? t('members.invalidLogin') : t('errors.validation')
     return
   }
   inviting.value = true

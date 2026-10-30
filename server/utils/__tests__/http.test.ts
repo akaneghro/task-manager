@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { ServiceError } from '../../services/context'
-import { httpErrorInputOf, isSameOriginRequest, toHttpError } from '../http'
+import { httpErrorInputOf, isSameOriginRequest, needsCsrfCheck, toHttpError } from '../http'
 
 describe('httpErrorInputOf', () => {
   it.each([
@@ -18,6 +18,11 @@ describe('httpErrorInputOf', () => {
       message: `boom ${code}`,
       data: { code, message: `boom ${code}` },
     })
+  })
+
+  it('a conflict that only carries a reason is not a version conflict', () => {
+    const input = httpErrorInputOf(new ServiceError('conflict', '"bob" is already a member', { reason: 'already_member' }))
+    expect(input?.data).toEqual({ code: 'conflict', message: '"bob" is already a member', details: { reason: 'already_member' } })
   })
 
   it('keeps details of non-conflict errors', () => {
@@ -128,5 +133,22 @@ describe('isSameOriginRequest', () => {
   it('handles array headers and an empty request host', () => {
     expect(isSameOriginRequest({ origin: ['https://tasks.example.com'] }, '', site)).toBe(true)
     expect(isSameOriginRequest({ origin: 'http://localhost:3000' }, '', '')).toBe(false)
+  })
+})
+
+describe('needsCsrfCheck', () => {
+  it('checks every state-changing /api request (an Authorization header is no exemption)', () => {
+    expect(needsCsrfCheck('POST', '/api/tokens')).toBe(true)
+    expect(needsCsrfCheck('post', '//API//accounts/1/reveal')).toBe(true)
+    expect(needsCsrfCheck('PATCH', '/api/tasks/ABC-1')).toBe(true)
+    expect(needsCsrfCheck('DELETE', '/api/share-links/1')).toBe(true)
+  })
+
+  it('skips safe methods and non-/api routes', () => {
+    expect(needsCsrfCheck('GET', '/api/tasks')).toBe(false)
+    expect(needsCsrfCheck('HEAD', '/api/tasks')).toBe(false)
+    expect(needsCsrfCheck('OPTIONS', '/api/tasks')).toBe(false)
+    expect(needsCsrfCheck('POST', '/mcp')).toBe(false)
+    expect(needsCsrfCheck('GET', '/auth/github')).toBe(false)
   })
 })

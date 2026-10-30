@@ -201,6 +201,21 @@ const showSecret = ref(false)
 const saving = ref(false)
 const formError = ref<string | null>(null)
 
+const FIELD_LABEL_KEYS: Record<string, string> = {
+  service: 'vault.service',
+  url: 'vault.url',
+  username: 'vault.username',
+  notes: 'vault.notes',
+  secret: 'vault.secret',
+}
+
+/** Translated message for a failed client-side check (the shared zod schemas speak English). */
+function issueMessage(issues: ReadonlyArray<{ path: ReadonlyArray<PropertyKey> }>): string {
+  const field = firstIssueField(issues)
+  const label = field ? FIELD_LABEL_KEYS[field] : undefined
+  return label ? t('errors.invalidField', { field: t(label) }) : t('errors.validation')
+}
+
 function emptyToNull(value: string): string | null {
   const trimmed = value.trim()
   return trimmed ? trimmed : null
@@ -224,7 +239,7 @@ async function submit() {
       else if (form.secret) body.secret = form.secret
       const parsed = updateAccountSchema.safeParse(body)
       if (!parsed.success) {
-        formError.value = parsed.error.issues[0]?.message ?? t('errors.validation')
+        formError.value = issueMessage(parsed.error.issues)
         return
       }
       saved = await apiFetch<AccountDto>(`/api/accounts/${props.account.id}`, { method: 'PATCH', body })
@@ -233,7 +248,7 @@ async function submit() {
       const body = { ...base, secret: form.secret ? form.secret : null }
       const parsed = createAccountSchema.safeParse(body)
       if (!parsed.success) {
-        formError.value = parsed.error.issues[0]?.message ?? t('errors.validation')
+        formError.value = issueMessage(parsed.error.issues)
         return
       }
       saved = await apiFetch<AccountDto>(`/api/projects/${encodeURIComponent(props.slug)}/accounts`, { method: 'POST', body })

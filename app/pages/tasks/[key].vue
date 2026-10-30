@@ -31,6 +31,24 @@
       />
     </div>
     <EmptyState
+      v-else-if="error && !notFound"
+      icon="alert"
+      :title="$t('tasks.detail.loadError')"
+      :description="apiError.message(error)"
+    >
+      <button
+        type="button"
+        class="btn-secondary"
+        @click="refresh()"
+      >
+        <Icon
+          name="refresh"
+          class="size-4"
+        />
+        {{ $t('tasks.retry') }}
+      </button>
+    </EmptyState>
+    <EmptyState
       v-else
       icon="alert"
       :title="$t('tasks.detail.notFound')"
@@ -47,7 +65,13 @@ const route = useRoute()
 const ui = useUiStore()
 const key = computed(() => String(route.params.key ?? ''))
 
-const { task, pending, setTask, refresh } = useTask(key)
+const apiError = useApiError()
+const { task, pending, error, setTask, refresh, ready } = useTask(key)
+const notFound = computed(() => !task.value && (!error.value || apiError.status(error.value) === 404))
+
+// Unknown tasks render an in-page message but still answer with the real HTTP status (like the public pages).
+await useSsrStatus(ready, () => (task.value ? null : (error.value ? (apiError.status(error.value) ?? 500) : 404)))
+
 usePageTitle(() => (task.value ? `${task.value.key} ${task.value.title}` : key.value))
 
 const backLink = computed(() => (task.value ? `/projects/${task.value.projectSlug}/tasks` : '/tasks'))

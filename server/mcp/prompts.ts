@@ -11,10 +11,12 @@ export function nextTaskPrompt(project?: string): GetPromptResult {
   const target = project ? `project "${project}"` : 'the session default project'
   return userPrompt([
     `Pick up the next task of ${target} in Task Manager and start it:`,
-    `1. Call get_context${project ? ` with project "${project}"` : ''}.`,
+    `1. Call get_context${project ? ` with project "${project}"` : ''} and read the project notes it returns `
+    + '(knowledge from earlier sessions; if "notesTruncated", read the rest with get_project).',
     '2. If a task is already "in_progress", continue with it unless it is clearly not yours to do. Otherwise choose '
-    + 'the top task of "nextUp" (highest priority, then earliest due date) that is not blocked and that you can do '
-    + '(executor "ai" or "mixed").',
+    + 'the first task of "nextUp" (startable todo tasks: work for "ai"/"mixed" first, then by priority and due date) '
+    + 'that you can do (executor "ai" or "mixed", no "blockedBy"). If none fits, call list_tasks with status ["todo"] '
+    + 'and executor ["ai", "mixed"] and take the first row without "blockedBy"; if there is still none, tell me.',
     '3. Read it with get_task, then set_status "in_progress" passing its version as expectedVersion.',
     '4. Outline a short plan. If the task has no checklist and the work has several steps, add them with '
     + 'add_checklist_items.',
@@ -31,9 +33,12 @@ export function wrapUpPrompt(ref?: string): GetPromptResult {
     '3. add_comment with a concise summary of this session: what was done, files changed, commits, decisions, '
     + 'open questions and next steps. Never include secrets.',
     '4. Set the status: "done" if fully finished, "in_review" if I should check it, "blocked" with a blocker if '
-    + 'waiting on someone, or keep "in_progress" if work remains.',
-    '5. If you found follow-up work or ideas, create tasks for them (type "idea" when unsure) instead of doing them now.',
-    '6. Reply with a short recap listing the task keys and their new status.',
+    + 'waiting on someone, or keep "in_progress" if work remains. If the task had a third-party blocker that is '
+    + 'resolved, pass blocker null.',
+    '5. If you learned something durable about the project (setup steps, decisions, gotchas), append it with '
+    + 'update_project_notes (mode "append").',
+    '6. If you found follow-up work or ideas, create tasks for them (type "idea" when unsure) instead of doing them now.',
+    '7. Reply with a short recap listing the task keys and their new status.',
   ].join('\n'))
 }
 

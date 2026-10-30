@@ -10,7 +10,7 @@ import { createAccountSchema, updateAccountSchema } from '../../shared/schemas/p
 import type { CreateAccountInput, UpdateAccountInput } from '../../shared/schemas/project'
 import type { AccountDto } from '../../shared/types/dto'
 import { decryptSecret, encryptSecret } from '../utils/crypto'
-import { ServiceError, assertCan, nowOf } from './context'
+import { assertCan, because, nowOf, ServiceError } from './context'
 import type { ServiceContext } from './context'
 import { findProjectRowById, getVisibleProjectBySlug } from './lookup'
 import { isoOrNull, parseInput } from './projects'
@@ -36,7 +36,7 @@ export function toAccountDto(row: ProjectAccountRow): AccountDto {
 }
 
 function requireVaultKey(ctx: ServiceContext): string {
-  if (!ctx.vaultKey) throw new ServiceError('invalid', 'Vault key not configured')
+  if (!ctx.vaultKey) throw new ServiceError('invalid', 'Vault key not configured', because('vault_unavailable'))
   return ctx.vaultKey
 }
 
@@ -46,7 +46,7 @@ async function encrypt(ctx: ServiceContext, secret: string, accountId: string): 
   }
   catch (error) {
     if (error instanceof ServiceError) throw error
-    throw new ServiceError('invalid', 'Vault key not configured correctly')
+    throw new ServiceError('invalid', 'Vault key not configured correctly', because('vault_unavailable'))
   }
 }
 
@@ -57,7 +57,7 @@ async function decrypt(ctx: ServiceContext, row: ProjectAccountRow): Promise<str
     return await decryptSecret(row.secretEnc, key, row.id)
   }
   catch {
-    throw new ServiceError('invalid', 'The secret cannot be decrypted (wrong vault key or corrupted data)')
+    throw new ServiceError('invalid', 'The secret cannot be decrypted (wrong vault key or corrupted data)', because('vault_unavailable'))
   }
 }
 
@@ -200,7 +200,7 @@ export interface SharedSecretDto {
 export async function getSharedSecret(ctx: ServiceContext, accountId: string, reason: string): Promise<SharedSecretDto> {
   const { account, project } = await getVisibleAccount(ctx, accountId)
   assertCan(ctx, 'secret.readShared', { projectId: project.id })
-  if (!account.shareWithClaude) throw new ServiceError('forbidden', 'This secret is not shared with Claude')
+  if (!account.shareWithClaude) throw new ServiceError('forbidden', 'This secret is not shared with Claude', because('secret_not_shared'))
   const secret = await decrypt(ctx, account)
   const why = reason.replace(/\s+/g, ' ').trim().slice(0, REASON_MAX)
   await recordAccess(ctx, account.id, why ? `${ctx.actor.source} (${why})` : ctx.actor.source)

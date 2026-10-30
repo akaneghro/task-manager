@@ -6,6 +6,7 @@
       </h1>
       <ViewToggle v-model="page.view.value" />
       <QuickAdd
+        v-if="page.canCreate.value"
         class="w-full lg:ml-auto lg:w-auto lg:min-w-[30rem]"
         @created="page.onTaskCreated"
       />
@@ -39,6 +40,7 @@
     <TaskBoard
       v-else-if="page.view.value === 'board'"
       :tasks="page.tasks.value"
+      :total="page.total.value"
       show-project
       :can-edit="page.canEditTask"
       @open="page.openTask"
@@ -70,7 +72,10 @@
       @update:sort="page.sort.value = $event"
     />
 
-    <p class="hidden text-xs text-gray-400 sm:block dark:text-gray-500">
+    <p
+      v-if="page.canCreate.value"
+      class="hidden text-xs text-gray-400 sm:block dark:text-gray-500"
+    >
       {{ $t('tasks.shortcutsHint') }}
     </p>
 

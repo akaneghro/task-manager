@@ -104,7 +104,7 @@ const saving = ref(false)
 const formOpen = ref(false)
 
 const projectOptions = computed(() => {
-  const editable = projects.value.filter(p => p.status !== 'archived' && (p.capabilities?.edit ?? true))
+  const editable = projects.value.filter(p => p.status !== 'archived' && (p.capabilities?.edit ?? false))
   return editable.length > 0 ? editable : [{ slug: INBOX_PROJECT.slug, name: INBOX_PROJECT.name }]
 })
 

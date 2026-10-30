@@ -8,11 +8,11 @@ import { canSeeProject } from '../../shared/utils/permissions'
 import { inviteMemberSchema, updateMemberSchema } from '../../shared/schemas/project'
 import type { InviteMemberInput } from '../../shared/schemas/project'
 import type { MemberDto } from '../../shared/types/dto'
-import { ServiceError, assertCan, nowOf } from './context'
+import { assertCan, because, nowOf, ServiceError } from './context'
 import type { ServiceContext } from './context'
 import { findProjectRowById, getVisibleProjectBySlug } from './lookup'
 import { isUniqueViolation, isoOrNull, parseInput } from './projects'
-import { findMemberUserByLogin, findOwnerUser } from './users'
+import { findOwnerUser } from './users'
 
 export function toMemberDto(row: ProjectMemberRow, avatarUrl: string | null): MemberDto {
   return {
@@ -64,7 +64,7 @@ export async function listMembers(ctx: ServiceContext, slug: string): Promise<Me
 
 /**
  * Invites a GitHub login. Re-inviting a revoked login reactivates its row; inviting an active member is a conflict.
- * When the login already belongs to a known user, the invitation is linked to it right away.
+ * The invitation stays unlinked until the invitee signs in with GitHub (see `resolveGithubLogin`).
  */
 export async function inviteMember(ctx: ServiceContext, slug: string, input: InviteMemberInput): Promise<MemberDto> {
   const project = await getVisibleProjectBySlug(ctx, slug)
@@ -75,19 +75,21 @@ export async function inviteMember(ctx: ServiceContext, slug: string, input: Inv
 
   const owner = await findOwnerUser(ctx.db)
   if (owner && owner.githubLogin.toLowerCase() === lower) {
-    throw new ServiceError('invalid', 'The owner already has full access and cannot be invited')
+    throw new ServiceError('invalid', 'The owner already has full access and cannot be invited', because('owner_invite'))
   }
 
-  const user = await findMemberUserByLogin(ctx.db, login)
+  // The invitation is never pre-linked to a user found by its stored login: that login may be stale (renamed
+  // account, name taken over by someone else). The login gate links it on the invitee's next GitHub sign-in,
+  // when the login comes from the live GitHub profile.
   const now = nowOf(ctx)
   const [existing] = await ctx.db.select().from(projectMembers)
     .where(and(eq(projectMembers.projectId, project.id), sql`lower(${projectMembers.githubLogin}) = ${lower}`))
     .limit(1)
 
   if (existing) {
-    if (!existing.revokedAt) throw new ServiceError('conflict', `"${existing.githubLogin}" is already a member of this project`)
+    if (!existing.revokedAt) throw new ServiceError('conflict', `"${existing.githubLogin}" is already a member of this project`, because('already_member'))
     await ctx.db.update(projectMembers)
-      .set({ githubLogin: login, role: data.role, userId: user?.id ?? null, invitedAt: now, acceptedAt: null, revokedAt: null })
+      .set({ githubLogin: login, role: data.role, userId: null, invitedAt: now, acceptedAt: null, revokedAt: null })
       .where(eq(projectMembers.id, existing.id))
     return loadMemberDto(ctx, existing.id)
   }
@@ -99,12 +101,12 @@ export async function inviteMember(ctx: ServiceContext, slug: string, input: Inv
       projectId: project.id,
       githubLogin: login,
       role: data.role,
-      userId: user?.id ?? null,
+      userId: null,
       invitedAt: now,
     })
   }
   catch (error) {
-    if (isUniqueViolation(error)) throw new ServiceError('conflict', `"${login}" is already a member of this project`)
+    if (isUniqueViolation(error)) throw new ServiceError('conflict', `"${login}" is already a member of this project`, because('already_member'))
     throw error
   }
   return loadMemberDto(ctx, id)

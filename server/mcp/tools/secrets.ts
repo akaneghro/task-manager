@@ -11,11 +11,12 @@ export const registerSecretTools: ToolRegistrar = (server, ctx) => {
   server.registerTool('list_shared_secrets', {
     title: 'List shared secrets',
     description: 'Lists the vault accounts of a project that the user shared with Claude (service, url, username, '
-      + 'notes, accountId). Never returns secret values. Only works with a token that allows secrets.',
+      + 'notes, accountId). Never returns secret values. Only works with a token created with "Allow secrets" '
+      + '(get_context shows session.secretsAllowed); otherwise ask the user to create such a token.',
     inputSchema: z.object({ project: projectParam.optional() }),
     annotations: READ_ONLY,
   }, ({ project }) => runTool(async () => {
-    const accounts = await listSharedSecrets(ctx, requireProject(ctx, project))
+    const accounts = await listSharedSecrets(ctx, await requireProject(ctx, project))
     return jsonResult({
       accounts: accounts.map(a => ({
         accountId: a.id,

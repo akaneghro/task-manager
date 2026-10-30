@@ -29,8 +29,10 @@ export const MCP_TOOL_NAMES = [
   'toggle_checklist_item',
   'add_comment',
   'link_tasks',
+  'unlink_tasks',
   'create_project',
   'update_project_notes',
+  'update_project_links',
   'list_shared_secrets',
   'get_shared_secret',
 ] as const
@@ -50,14 +52,25 @@ export function buildMcpServer(ctx: ServiceContext): McpServer {
   return server
 }
 
+/** Logs transport/factory/protocol errors (message only: never bodies, headers or tokens). */
+export function logMcpError(error: unknown): void {
+  console.error('[mcp]', error instanceof Error ? error.message : 'unknown error')
+}
+
 /**
  * Stateless Streamable HTTP handler. The caller authenticates the bearer token and passes `mcpAuthInfo(...)` as
  * `authInfo` to `handler.fetch()`; the factory turns it back into an actor and builds a per-request server.
+ *
+ * Response shape: modern (2026-07-28) clients get a single JSON body (the default `auto` mode; no tool emits
+ * mid-call notifications, so it never upgrades to SSE). Legacy 2025-era clients, Claude Code included, go through
+ * the SDK's stateless fallback, which always answers with a single SSE-framed response (the client must send
+ * `Accept: application/json, text/event-stream`). `responseMode: 'json'` is not set on purpose: it only affects
+ * modern traffic, which is already JSON, and makes the SDK log a warning at startup.
  */
 export function createTaskManagerMcpHandler(contextFor: (actor: Actor) => ServiceContext): McpHttpHandler {
   return createMcpHandler(({ authInfo }) => {
     const actor = mcpActorFromAuthInfo(authInfo)
     if (!actor) throw new Error('MCP request without a valid identity')
     return buildMcpServer(contextFor(actor))
-  }, { responseMode: 'json', legacy: 'stateless' })
+  }, { legacy: 'stateless', onerror: logMcpError })
 }

@@ -119,6 +119,9 @@ const taskKey = computed(() => {
 
 const { task, pending, setTask, refresh } = useTask(taskKey)
 
+// aria-modal: Tab must not reach the list and filters behind the drawer.
+useFocusTrap(panel, () => taskKey.value !== null)
+
 function close() {
   const { task: _omit, ...query } = route.query
   void router.replace({ query })
