@@ -11,7 +11,7 @@ export const slugSchema = z.string().trim().toLowerCase().regex(/^[a-z0-9]+(?:-[
 
 export const projectKeySchema = z.string().trim().toUpperCase().regex(/^[A-Z][A-Z0-9]{1,5}$/, '2-6 characters, A-Z and digits, starting with a letter')
 
-/** Task reference: a task key (`RNK-12`, case-insensitive) or a task UUID. */
+/** Task reference: a task key (`ACM-12`, case-insensitive) or a task UUID. */
 export const taskRefSchema = z.string().trim().min(1).refine(
   value => parseTaskKey(value) !== null || isUuid(value),
   'Expected a task key like ABC-12 or a task id',

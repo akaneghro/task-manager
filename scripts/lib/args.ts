@@ -108,7 +108,7 @@ export const CONNECT_USAGE = `Usage: pnpm connect <folder> [projectSlug] [option
 Writes (or updates) the Task Manager MCP server entry in <folder>/.mcp.json
 and makes sure .mcp.json is gitignored there. <folder> is where you open
 Claude Code: a git repo or any folder (e.g. one holding several repos).
-projectSlug defaults to the folder name ("C:\\Work\\Renkia Web" -> renkia-web).
+projectSlug defaults to the folder name ("C:\\Work\\Acme Web" -> acme-web).
 The project does not need to exist yet: Claude can create it with that slug.
 
 Options:
@@ -156,7 +156,7 @@ export function parseConnectArgs(argv: readonly string[]): ConnectOptions {
   }
 }
 
-/** Project slug derived from a folder path: `C:\Work\Renkia Web\` -> `renkia-web`. Empty when nothing usable. */
+/** Project slug derived from a folder path: `C:\Work\Acme Web\` -> `acme-web`. Empty when nothing usable. */
 export function projectSlugFromFolder(folder: string): string {
   return slugify(basename(resolve(folder.replace(/[\\/]+$/, '') || '.')))
 }

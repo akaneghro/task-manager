@@ -1,4 +1,4 @@
-// Human friendly task keys such as `RNK-12` (project key + per-project number).
+// Human friendly task keys such as `ACM-12` (project key + per-project number).
 
 const PROJECT_KEY_RE = /^[A-Z][A-Z0-9]{1,5}$/
 const TASK_KEY_RE = /^([A-Z][A-Z0-9]{1,5})-(\d{1,9})$/
@@ -17,7 +17,7 @@ export function formatTaskKey(projectKey: string, number: number): string {
   return `${projectKey}-${number}`
 }
 
-/** Parses `rnk-12` / `RNK-12` (case-insensitive). Returns null when the input is not a task key. */
+/** Parses `acm-12` / `ACM-12` (case-insensitive). Returns null when the input is not a task key. */
 export function parseTaskKey(input: string): ParsedTaskKey | null {
   const match = TASK_KEY_RE.exec(input.trim().toUpperCase())
   if (!match?.[1] || !match[2]) return null
@@ -30,7 +30,7 @@ export function isUuid(input: string): boolean {
   return UUID_RE.test(input)
 }
 
-/** Suggests a project key from a name: "Renkia Web" -> "RW", "renkia" -> "REN". */
+/** Suggests a project key from a name: "Acme Web" -> "AW", "acme" -> "ACM". */
 export function suggestProjectKey(name: string): string {
   const words = name
     .normalize('NFD')
@@ -47,7 +47,7 @@ export function suggestProjectKey(name: string): string {
   return key.length >= 2 ? key : `${key}X`
 }
 
-/** Builds a URL-safe slug: "Renkia Web App!" -> "renkia-web-app". */
+/** Builds a URL-safe slug: "Acme Web App!" -> "acme-web-app". */
 export function slugify(input: string): string {
   return input
     .normalize('NFD')

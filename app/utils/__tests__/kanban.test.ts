@@ -92,11 +92,11 @@ describe('kanban helpers', () => {
 describe('sameProjectNeighborsOfItem', () => {
   it('skips cards of other projects (global board)', () => {
     const column = [
-      { id: 'r1', projectId: 'rnk' },
+      { id: 'r1', projectId: 'acm' },
       { id: 'w1', projectId: 'web' },
-      { id: 'm', projectId: 'rnk' },
+      { id: 'm', projectId: 'acm' },
       { id: 'w2', projectId: 'web' },
-      { id: 'r2', projectId: 'rnk' },
+      { id: 'r2', projectId: 'acm' },
     ]
     expect(sameProjectNeighborsOfItem(column, 'm')).toEqual({ beforeId: 'r1', afterId: 'r2' })
     expect(sameProjectNeighborsOfItem(column.slice(1, 4), 'm')).toEqual({ beforeId: null, afterId: null })

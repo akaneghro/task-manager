@@ -102,7 +102,7 @@ export const registerProjectTools: ToolRegistrar = (server, ctx) => {
     title: 'Create project',
     description: 'Creates a new project. Only do this when the user asks for it (or accepts your offer when '
       + 'get_context reports "missingProject": then pass that exact value as "slug"). "key" is the 2-6 letter task key '
-      + 'prefix (e.g. "RNK" -> tasks RNK-1, RNK-2...) and can never change. The slug is derived from the name when '
+      + 'prefix (e.g. "ACM" -> tasks ACM-1, ACM-2...) and can never change. The slug is derived from the name when '
       + 'omitted ("inbox" and "all" are reserved).',
     inputSchema: z.object({
       name: z.string().trim().min(1).max(120).describe('Display name.'),

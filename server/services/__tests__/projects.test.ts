@@ -59,15 +59,15 @@ describe('ensureInbox', () => {
 describe('createProject', () => {
   it('derives the slug from the name and stores links in order', async () => {
     const p = await createProject(owner(), {
-      name: 'Renkia Web App!',
-      key: 'rnk',
+      name: 'Acme Web App!',
+      key: 'acm',
       client: 'ACME',
       links: [
         { kind: 'repo', label: 'GitHub', url: 'https://github.com/x/y' },
         { label: 'Docs', url: 'https://docs.example.com' },
       ],
     })
-    expect(p).toMatchObject({ slug: 'renkia-web-app', key: 'RNK', status: 'idea', client: 'ACME', version: 1, isInbox: false })
+    expect(p).toMatchObject({ slug: 'acme-web-app', key: 'ACM', status: 'idea', client: 'ACME', version: 1, isInbox: false })
     expect(p.links.map(l => [l.label, l.kind, l.position])).toEqual([['GitHub', 'repo', 0], ['Docs', 'other', 1]])
     expect(p.createdBy).toBe(`user:${t.ownerId}`)
     expect(p.capabilities).toEqual({ edit: true, comment: true, manage: true, vault: true })

@@ -19,7 +19,7 @@ export const IDEMPOTENT_WRITE: ToolAnnotations = { readOnlyHint: false, destruct
 export const DESTRUCTIVE_IDEMPOTENT_WRITE: ToolAnnotations = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false }
 
 export const projectParam = z.string().trim().min(1).max(60)
-  .describe('Project slug (see list_projects; the project key such as "RNK" also works). Omit to use this session\'s default project.')
+  .describe('Project slug (see list_projects; the project key such as "ACM" also works). Omit to use this session\'s default project.')
 
 export const taskRefParam = taskRefSchema.describe('Task key like "ABC-12" (preferred) or task id.')
 
@@ -35,7 +35,7 @@ const PROJECT_KEY_RE = /^[a-z][a-z0-9]{1,5}$/i
 
 /**
  * Resolves a project argument to a visible project: by slug, else by project key (Claude often only knows the
- * key from task keys like RNK-12). Throws an actionable `not_found` otherwise.
+ * key from task keys like ACM-12). Throws an actionable `not_found` otherwise.
  */
 export async function resolveProjectArg(ctx: ServiceContext, value: string, fromSession = false): Promise<ProjectRow> {
   try {

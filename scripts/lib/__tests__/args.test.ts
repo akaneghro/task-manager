@@ -63,11 +63,17 @@ describe('parseConnectArgs', () => {
   })
 
   it('derives the project slug from the folder name when omitted', () => {
-    expect(parseConnectArgs(['C:\\Work\\PROJECTS\\Renkia Web'])).toMatchObject({ projectSlug: 'renkia-web', slugFromFolder: true })
-    expect(parseConnectArgs(['C:/Work/PROJECTS/renkia/'])).toMatchObject({ projectSlug: 'renkia', slugFromFolder: true })
-    expect(parseConnectArgs(['C:/Work/PROJECTS/renkia', 'RNK-site'])).toMatchObject({ projectSlug: 'rnk-site', slugFromFolder: false })
-    expect(projectSlugFromFolder('D:\\Clientes\\Casa Índica\\')).toBe('casa-indica')
+    expect(parseConnectArgs(['/work/projects/Acme Web'])).toMatchObject({ projectSlug: 'acme-web', slugFromFolder: true })
+    expect(parseConnectArgs(['C:/Work/projects/acme/'])).toMatchObject({ projectSlug: 'acme', slugFromFolder: true })
+    expect(parseConnectArgs(['C:/Work/projects/acme', 'ACM-site'])).toMatchObject({ projectSlug: 'acm-site', slugFromFolder: false })
+    expect(projectSlugFromFolder('/work/clients/Café Ñandú/')).toBe('cafe-nandu')
     expect(() => parseConnectArgs(['C:/Work/___'])).toThrow(/Could not derive/)
+  })
+
+  // Backslashes only separate folders on Windows (CI also runs on Linux).
+  it.runIf(process.platform === 'win32')('derives the slug from Windows paths with backslashes', () => {
+    expect(parseConnectArgs(['C:\\Work\\projects\\Acme Web'])).toMatchObject({ projectSlug: 'acme-web', slugFromFolder: true })
+    expect(projectSlugFromFolder('D:\\Clients\\Café Ñandú\\')).toBe('cafe-nandu')
   })
 
   it('validates positionals and the server name', () => {

@@ -401,13 +401,13 @@ describe('mcp server: projects and context', () => {
   it('creates projects, reads them and edits notes with append/replace', async () => {
     const client = await connect(mcpCtx())
     const created = json<{ slug: string, key: string, version: number, url: string }>(
-      await call(client, 'create_project', { name: 'Renkia Web', key: 'rnk', client: 'Renkia' }),
+      await call(client, 'create_project', { name: 'Acme Web', key: 'acm', client: 'Acme' }),
     )
-    expect(created).toMatchObject({ slug: 'renkia-web', key: 'RNK', url: 'http://localhost:3000/projects/renkia-web' })
-    expect((await call(client, 'create_project', { name: 'Dup', key: 'RNK' })).isError).toBe(true)
+    expect(created).toMatchObject({ slug: 'acme-web', key: 'ACM', url: 'http://localhost:3000/projects/acme-web' })
+    expect((await call(client, 'create_project', { name: 'Dup', key: 'ACM' })).isError).toBe(true)
 
     const listed = json<{ projects: Array<{ slug: string }> }>(await call(client, 'list_projects', { status: ['idea'] }))
-    expect(listed.projects.map(p => p.slug)).toEqual(['other', 'renkia-web'])
+    expect(listed.projects.map(p => p.slug)).toEqual(['acme-web', 'other'])
 
     const appended = json<{ version: number }>(await call(client, 'update_project_notes', { mode: 'append', content: 'First note' }))
     json(await call(client, 'update_project_notes', { mode: 'append', content: 'Second note' }))

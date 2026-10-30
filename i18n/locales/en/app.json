@@ -108,7 +108,7 @@
   "projectForm": {
     "name": "Name",
     "key": "Key",
-    "keyHint": "2–6 letters/digits (e.g. RNK). Cannot be changed later.",
+    "keyHint": "2–6 letters/digits (e.g. ACM). Cannot be changed later.",
     "slug": "Slug (URL)",
     "slugHint": "Optional. Generated from the name.",
     "status": "Status",
