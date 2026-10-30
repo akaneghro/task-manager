@@ -24,6 +24,8 @@ export default defineConfig({
         test: {
           name: 'server',
           environment: 'node',
+          // File-backed SQLite is much slower on shared CI runners (Windows especially).
+          testTimeout: 30_000,
           include: ['server/**/__tests__/**/*.test.ts', 'shared/**/__tests__/**/*.test.ts', 'scripts/**/__tests__/**/*.test.ts'],
         },
       },
