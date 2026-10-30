@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Nuxt build/dev
+.nuxt/
+.output/
+.data/
+dist/
+
+# Local database
+data/*.db
+data/*.db-*
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Claude Code
+.claude/
+
+# MCP config (contains tokens)
+.mcp.json
+
+# Vitest
+coverage/
+
+# Misc
+nul
+*.log
