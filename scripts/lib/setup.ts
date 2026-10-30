@@ -59,8 +59,8 @@ Options:
   --client-secret <secret>  GitHub OAuth App client secret (prefer the hidden prompt:
                             flags end up in your shell history)
   --login <username>        Your GitHub username (the owner of this instance)
-  -y, --yes                 Do not ask anything: keep an existing env file and leave
-                            values not given as flags empty
+  -y, --yes                 Do not ask anything: keep an existing env file (flags given
+                            are still written to it) and leave values not given empty
   --force                   Recreate an existing env file (a backup is kept)
   -h, --help                Show this help`
 
@@ -100,6 +100,15 @@ export function parseSetupArgs(argv: readonly string[]): SetupOptions {
     dir: parsed.strings.dir,
     help: parsed.booleans.help === true,
   }
+}
+
+/** Values given as flags, by env key (an existing env file that is kept still gets them). */
+export function givenEnvValues(options: Pick<SetupOptions, 'clientId' | 'clientSecret' | 'login'>): Record<string, string> {
+  const values: Record<string, string> = {}
+  if (options.clientId !== undefined) values.NUXT_OAUTH_GITHUB_CLIENT_ID = options.clientId
+  if (options.clientSecret !== undefined) values.NUXT_OAUTH_GITHUB_CLIENT_SECRET = options.clientSecret
+  if (options.login !== undefined) values.NUXT_OWNER_GITHUB_LOGIN = options.login
+  return values
 }
 
 interface Assignment {
@@ -148,9 +157,14 @@ export interface FilledEnv {
 
 /**
  * Sets `values` in an env template: the first uncommented `KEY=` line of each key gets the new value,
- * keeping comments, order, spacing, inline comments and line endings. Unknown keys are appended.
+ * keeping comments, order, spacing, inline comments and line endings. Unknown keys are appended
+ * (or skipped with `append: false`).
  */
-export function fillEnvTemplate(template: string, values: Readonly<Record<string, string>>): FilledEnv {
+export function fillEnvTemplate(
+  template: string,
+  values: Readonly<Record<string, string>>,
+  { append = true }: { append?: boolean } = {},
+): FilledEnv {
   const pending = new Map(Object.entries(values).map(([key, value]) => [key, formatEnvValue(value)]))
   // Odd indexes are the original line breaks, so mixed endings survive untouched.
   const parts = template.split(/(\r?\n)/)
@@ -163,7 +177,7 @@ export function fillEnvTemplate(template: string, values: Readonly<Record<string
     pending.delete(assignment.key)
   }
   let text = parts.join('')
-  const appended = [...pending.keys()]
+  const appended = append ? [...pending.keys()] : []
   if (appended.length > 0) {
     const eol = detectEol(template)
     if (text !== '' && !text.endsWith('\n')) text += eol
@@ -182,10 +196,16 @@ export function emptyEnvKeys(text: string, keys: readonly string[]): string[] {
   return keys.filter(key => !filled.has(key))
 }
 
-/** Backup name for a replaced env file, e.g. `.env.bak-20261030-143005` (matched by the `.env.*` gitignore rule). */
-export function envBackupName(now: Date): string {
+/**
+ * Backup name for a replaced env file, e.g. `.env.bak-20261030-143005` (matched by the `.env.*` gitignore rule).
+ * Gets a `-2`, `-3`... suffix while `taken(name)` is true, so an earlier backup (and its vault key) is never replaced.
+ */
+export function envBackupName(now: Date, taken: (name: string) => boolean = () => false): string {
   const pad = (n: number) => String(n).padStart(2, '0')
   const date = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`
   const time = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
-  return `${ENV_FILE}.bak-${date}-${time}`
+  const base = `${ENV_FILE}.bak-${date}-${time}`
+  let name = base
+  for (let n = 2; taken(name); n++) name = `${base}-${n}`
+  return name
 }

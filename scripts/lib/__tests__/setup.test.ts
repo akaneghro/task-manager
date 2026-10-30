@@ -9,6 +9,7 @@ import {
   fillEnvTemplate,
   formatEnvValue,
   generateEnvSecrets,
+  givenEnvValues,
   isGithubLogin,
   isOAuthValue,
   parseSetupArgs,
@@ -160,6 +161,28 @@ describe('fillEnvTemplate', () => {
   it('returns the template unchanged without values', () => {
     expect(fillEnvTemplate(TEMPLATE, {})).toEqual({ text: TEMPLATE, appended: [] })
   })
+
+  it('only sets keys already present with append: false', () => {
+    expect(fillEnvTemplate('A=1\nB=2\n', { B: '', C: 'x' }, { append: false })).toEqual({ text: 'A=1\nB=\n', appended: [] })
+  })
+
+  it('writes flag values into a kept env file without touching its secrets', () => {
+    const kept = fillEnvTemplate(TEMPLATE, generateEnvSecrets()).text
+    const { text } = fillEnvTemplate(kept, givenEnvValues({ clientId: 'Ov23liAbcdef12', login: 'octocat' }))
+    expect(parseEnv(text)).toEqual({ ...parseEnv(kept), NUXT_OAUTH_GITHUB_CLIENT_ID: 'Ov23liAbcdef12', NUXT_OWNER_GITHUB_LOGIN: 'octocat' })
+    expect(emptyEnvKeys(text, REQUIRED_ENV_KEYS)).toEqual(['NUXT_OAUTH_GITHUB_CLIENT_SECRET'])
+  })
+})
+
+describe('givenEnvValues', () => {
+  it('maps only the flags that were given to their env keys', () => {
+    expect(givenEnvValues({})).toEqual({})
+    expect(givenEnvValues(parseSetupArgs(['--client-id', 'Ov23liAbcdef12', '--client-secret', 'secret_12345', '--login', '@octocat']))).toEqual({
+      NUXT_OAUTH_GITHUB_CLIENT_ID: 'Ov23liAbcdef12',
+      NUXT_OAUTH_GITHUB_CLIENT_SECRET: 'secret_12345',
+      NUXT_OWNER_GITHUB_LOGIN: 'octocat',
+    })
+  })
 })
 
 describe('emptyEnvKeys', () => {
@@ -182,6 +205,12 @@ describe('emptyEnvKeys', () => {
 describe('envBackupName', () => {
   it('uses a local timestamp covered by the env gitignore pattern', () => {
     expect(envBackupName(new Date(2026, 9, 3, 7, 5, 9))).toBe(`${ENV_FILE}.bak-20261003-070509`)
+  })
+
+  it('never reuses the name of an existing backup (two runs in the same second)', () => {
+    const base = `${ENV_FILE}.bak-20261003-070509`
+    const existing = new Set([base, `${base}-2`])
+    expect(envBackupName(new Date(2026, 9, 3, 7, 5, 9), name => existing.has(name))).toBe(`${base}-3`)
   })
 })
 

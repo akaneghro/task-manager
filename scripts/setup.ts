@@ -20,6 +20,7 @@ import {
   envBackupName,
   fillEnvTemplate,
   generateEnvSecrets,
+  givenEnvValues,
   isGithubLogin,
   isOAuthValue,
   parseSetupArgs,
@@ -114,10 +115,13 @@ async function createEnvFile(root: string, envPath: string, options: SetupOption
     NUXT_OAUTH_GITHUB_CLIENT_SECRET: clientSecret,
     NUXT_OWNER_GITHUB_LOGIN: login,
   }
-  const { text, appended } = fillEnvTemplate(readFileSync(templatePath, 'utf8'), values)
+  const filled = fillEnvTemplate(readFileSync(templatePath, 'utf8'), values)
+  // Neither is the optional owner id: cleared when the example has it, not added when it does not.
+  const { text } = fillEnvTemplate(filled.text, { NUXT_OWNER_GITHUB_ID: '' }, { append: false })
+  const { appended } = filled
 
   if (existsSync(envPath)) {
-    const backup = envBackupName(new Date())
+    const backup = envBackupName(new Date(), name => existsSync(join(dirname(envPath), name)))
     renameSync(envPath, join(dirname(envPath), backup))
     console.log(`Previous env file saved as ${backup} (it holds the old NUXT_VAULT_KEY).`)
   }
@@ -133,6 +137,22 @@ async function createEnvFile(root: string, envPath: string, options: SetupOption
   return emptyEnvKeys(text, REQUIRED_ENV_KEYS)
 }
 
+/** Keeps an existing env file (secrets untouched), writing only the values given as flags. Returns the keys still empty. */
+function keepEnvFile(envPath: string, options: SetupOptions): string[] {
+  let text = readFileSync(envPath, 'utf8')
+  const given = givenEnvValues(options)
+  const keys = Object.keys(given)
+  if (keys.length === 0) {
+    console.log(`Keeping ${envPath} as it is (--force recreates it).`)
+  }
+  else {
+    text = fillEnvTemplate(text, given).text
+    writeFileSync(envPath, text, 'utf8')
+    console.log(`Keeping ${envPath} (--force recreates it) and setting ${keys.join(', ')} from the flags.`)
+  }
+  return emptyEnvKeys(text, REQUIRED_ENV_KEYS)
+}
+
 async function run(options: SetupOptions): Promise<void> {
   const root = projectRoot()
   const dir = options.dir ? resolve(options.dir) : root
@@ -145,8 +165,7 @@ async function run(options: SetupOptions): Promise<void> {
   // 1) Env file
   let empty: string[]
   if (existsSync(envPath) && !await shouldOverwrite(envPath, options, interactive)) {
-    console.log(`Keeping ${envPath} as it is (--force recreates it).`)
-    empty = emptyEnvKeys(readFileSync(envPath, 'utf8'), REQUIRED_ENV_KEYS)
+    empty = keepEnvFile(envPath, options)
   }
   else {
     empty = await createEnvFile(root, envPath, options, interactive)
